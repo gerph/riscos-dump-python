@@ -125,7 +125,6 @@ class Dump(DumpBase):
         self.fh = fh
         self.offset_highlight = None
         self.indent = ''
-        self.little_endian = True
         self.heading = True
         self.heading_every = 16
         self.heading_breaks = True
