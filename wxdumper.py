@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Hex dump display of files, as a WxPython application.
 
@@ -18,13 +19,12 @@ app_version = '0.01'
 app_date = '15 Sep 2022'
 app_description = "Display contents of files"
 app_copyright = "(C) Gerph, 2022"
-# FIXME: Update website.
-app_website = "https://gerph.org/"
+app_website = "https://github.com/gerph/riscos-dump-python"
 app_license = open(os.path.join(os.path.dirname(__file__), 'LICENSE'), 'r').read()
 
 
 class MainFrame(wx.Frame):
-    """ This window displays a button """
+
     def __init__(self, app, title="Hex Dumper"):
         super(MainFrame, self).__init__(None, -1, title=title)
         self.app = app
