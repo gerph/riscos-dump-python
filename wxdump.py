@@ -115,6 +115,7 @@ class DumpGrid(gridlib.Grid):
     def __init__(self, parent, data, dump_params={}):
         super(DumpGrid, self).__init__(parent, -1, style=wx.VSCROLL)
 
+        self.parent = parent
         self.data = data
         self.dump = dump.DumpBase()
         self.dump.data = data
@@ -124,8 +125,8 @@ class DumpGrid(gridlib.Grid):
             setattr(self.dump, key, value)
 
         self.table = DumpTable(self.dump, self.data)
-
         self.SetTable(self.table, True)
+
         self.cellfont = wx.Font(12, wx.TELETYPE, wx.NORMAL, wx.NORMAL)
         self.SetDefaultCellFont(self.cellfont)
         self.SetLabelFont(wx.Font(12, wx.TELETYPE, wx.NORMAL, wx.FONTWEIGHT_BOLD))
@@ -136,34 +137,75 @@ class DumpGrid(gridlib.Grid):
         self.EnableGridLines(False)
         self.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
 
+        self.cellsize = (16 * 2, 16)
+        self.labelsize = (16 * 8, 16)
+        self.textsize = (16 * 16, 16)
+        self.min_width = 16
+        self.min_height = 16
+        self.resize()
+
+        # Build up the menu we'll use
+        self.menu = wx.Menu()
+
+        self.item_bytes = self.menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
+        self.Bind(wx.EVT_MENU, lambda event: self.SetWidth(1), self.item_bytes)
+
+        self.item_words = self.menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
+        self.Bind(wx.EVT_MENU, lambda event: self.SetWidth(4), self.item_words)
+
+        self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
+
+    def on_popup_menu(self, event):
+        self.item_bytes.Check(self.dump.width == 1)
+        self.item_words.Check(self.dump.width == 4)
+        self.PopupMenu(self.menu)
+
+    def SetWidth(self, width):
+        self.dump.columns = int(self.dump.width * self.dump.columns / width)
+        self.dump.width = width
+
+        self.table = DumpTable(self.dump, self.data)
+        self.SetTable(self.table, True)
+        self.resize()
+        self.parent.resize()
+
+    def resize(self):
         self.BeginBatch()
 
         dc = wx.ScreenDC()
         dc.SetFont(self.cellfont)
-        cellsize = dc.GetTextExtent('0' * (self.dump.width * 2 + 1))
+        self.labelsize = dc.GetTextExtent('M' * 9)
+        self.cellsize = dc.GetTextExtent('0' * (self.dump.width * 2 + 1))
+        self.textsize = dc.GetTextExtent('M' * (self.dump.width * self.dump.columns + 3))
+
         for col in range(self.dump.columns):
-            self.SetColSize(col, cellsize[0])
-        self.SetColLabelSize(cellsize[1] * 1.5)
+            self.SetColSize(col, self.cellsize[0])
+        self.SetColLabelSize(self.cellsize[1] * 1.5)
 
-        textsize = dc.GetTextExtent('M' * (self.dump.width * self.dump.columns + 3))
-        self.SetColSize(self.dump.columns, textsize[0])
-        self.min_height = textsize[1] * 1.5
+        self.SetColSize(self.dump.columns, self.textsize[0])
+        self.min_height = self.textsize[1] * 1.5
 
-        labelsize = dc.GetTextExtent('M' * 9)
-        self.SetRowLabelSize(labelsize[0])
-        self.min_width = labelsize[0]
+        self.SetRowLabelSize(self.labelsize[0])
+        self.min_width = self.labelsize[0]
 
         self.EndBatch()
         self.AdjustScrollbars()
 
+        self.InvalidateBestSize()
         (width, height) = self.GetBestSize()
         limit_height = min(height, 600)
         dx = wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
 
         self.SetMaxSize((width + dx, height))
+        self.ForceRefresh()
 
     def GetMinSize(self):
         return wx.Size(self.min_width, self.min_height)
+
+    def GetBestSize(self):
+        width = self.labelsize[0] + (self.cellsize[0] * self.dump.columns) + self.textsize[0]
+        height = self.cellsize[1] * (self.dump.rows() + 1.5)
+        return wx.Size(width, height)
 
 class DumpFrame(wx.Frame):
     """
@@ -178,17 +220,20 @@ class DumpFrame(wx.Frame):
         data = self.GetDumpData()
 
         sizer = wx.BoxSizer(wx.VERTICAL)
-        grid = DumpGrid(self, data, dump_params=dump_params)
-        sizer.Add(grid)
+        self.grid = DumpGrid(self, data, dump_params=dump_params)
+        sizer.Add(self.grid)
         self.SetSizer(sizer)
 
-        (width, height) = self.GetBestSize()
+        self.resize()
+
+    def resize(self):
+        (width, height) = self.grid.GetBestSize()
         limit_height = min(height, self.good_height)
         self.SetMaxSize((width, height))
 
         self.SetSize(width, limit_height)
 
-        (width, height) = grid.GetMinSize()
+        (width, height) = self.grid.GetMinSize()
         self.SetMinClientSize(wx.Size(width, height))
 
     def GetDumpData(self):

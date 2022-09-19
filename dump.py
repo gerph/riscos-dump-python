@@ -66,6 +66,13 @@ class DumpBase(object):
         """
         return self.columns * self.width * row
 
+    def rows(self):
+        """
+        Return the number of rows present.
+        """
+        rowsize = self.columns * self.width
+        return int((len(self.data) + rowsize - 1) / rowsize)
+
     def format_address(self, offset):
         return '{:x}'.format(offset + self.address_base)
 

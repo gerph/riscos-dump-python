@@ -114,7 +114,12 @@ class MyApp(wx.App):
 
     def OpenFileMessage(self, filename):
         print("Open %s" % (filename,))
-        frame = wxdump.DumpFileFrame(filename, "Hex Dumper: {}".format(filename))
+        frame = wxdump.DumpFileFrame(filename,
+                                     "Hex Dumper: {}".format(filename),
+                                     dump_params={
+                                            'columns': 16,
+                                            'width': 1
+                                        })
         frame.Show()
 
     def MacOpenFile(self, filename):
