@@ -103,7 +103,7 @@ class DumpTable(gridlib.GridTableBase):
         return self.headings[col]
 
     def GetRowLabelValue(self, row):
-        return self.dump.format_address(self.dump.row_to_offset(row))
+        return self.dump.format_address(self.dump.row_to_offset(row)).upper()
 
     def GetCellAlignment(self, row, col):
         return self.column_alignment[col]
@@ -148,11 +148,11 @@ class DumpTable(gridlib.GridTableBase):
             if value is None:
                 return None
             if width == 1:
-                return '{:02x}'.format(value)
+                return '{:02X}'.format(value)
             elif width == 4:
-                return '{:08x}'.format(value)
+                return '{:08X}'.format(value)
             elif width == 2:
-                return '{:04x}'.format(value)
+                return '{:04X}'.format(value)
             return value
         else:
             return rowtext
@@ -286,10 +286,10 @@ class DumpGrid(gridlib.Grid):
 
         for col in range(self.dump.columns):
             self.SetColSize(col, self.cellsize[0])
-        self.SetColLabelSize(self.cellsize[1] * 1.5)
+        self.SetColLabelSize(int(self.cellsize[1] * 1.5))
 
         self.SetColSize(self.dump.columns, self.textsize[0])
-        self.min_height = self.textsize[1] * 1.5
+        self.min_height = int(self.textsize[1] * 1.5)
 
         self.SetRowLabelSize(self.labelsize[0])
         self.min_width = self.labelsize[0]
@@ -297,21 +297,23 @@ class DumpGrid(gridlib.Grid):
         self.EndBatch()
         self.AdjustScrollbars()
 
+        self.ForceRefresh()
+        self.Layout()
+
         self.InvalidateBestSize()
         (width, height) = self.GetBestSize()
-        limit_height = min(height, 600)
         dx = wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
-
         self.SetMaxSize((width + dx, height))
-        self.ForceRefresh()
 
     def GetMinSize(self):
         return wx.Size(self.min_width, self.min_height)
 
     def GetBestSize(self):
-        width = self.labelsize[0] + (self.cellsize[0] * self.dump.columns) + self.textsize[0]
-        height = self.cellsize[1] * (self.dump.rows() + 1.5)
-        return wx.Size(width, height)
+        rect = self.CellToRect(self.dump.rows() - 1, self.dump.columns)
+        cells_width = rect.Right + self.labelsize[0]
+        cells_height = rect.Bottom + int(self.cellsize[1] * 1.5) + 1
+        return wx.Size(cells_width,
+                       cells_height)
 
 
 class DumpFrame(wx.Frame):
@@ -329,14 +331,16 @@ class DumpFrame(wx.Frame):
         self.cellinfo = cellinfo
 
         self.statusbar = None
+        self.statusbar_height = 0
         mouse_over = None
         if self.cellinfo:
             self.statusbar = DumpStatusBar(self)
             self.SetStatusBar(self.statusbar)
             mouse_over = self.update_statusbar
+            self.statusbar_height = self.statusbar.GetSize()[1]
 
         sizer = wx.BoxSizer(wx.VERTICAL)
-        self.grid = DumpGrid(self, data, dump_params=dump_params, mouse_over=self.update_statusbar)
+        self.grid = DumpGrid(self, data, dump_params=dump_params, mouse_over=mouse_over)
         sizer.Add(self.grid)
         self.SetSizer(sizer)
 
@@ -345,12 +349,12 @@ class DumpFrame(wx.Frame):
     def resize(self):
         (width, height) = self.grid.GetBestSize()
         limit_height = min(height, self.good_height)
-        self.SetMaxSize((width, height))
+        self.SetMaxClientSize((width, height))
 
-        self.SetSize(width, limit_height)
+        self.SetClientSize(width, limit_height)
 
         (width, height) = self.grid.GetMinSize()
-        self.SetMinClientSize(wx.Size(width, height))
+        self.SetMinClientSize(wx.Size(width, height + self.statusbar_height))
 
     def update_statusbar(self, offset):
         """
