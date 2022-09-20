@@ -119,7 +119,8 @@ class MyApp(wx.App):
                                      dump_params={
                                             'columns': 16,
                                             'width': 1
-                                        })
+                                        },
+                                     cellinfo=lambda offset: 'Offset %i' % (offset,))
         frame.Show()
 
     def MacOpenFile(self, filename):

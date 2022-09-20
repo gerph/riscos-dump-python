@@ -110,9 +110,16 @@ class DumpTable(gridlib.GridTableBase):
         return self.cache_rows[row]
 
 
+class DumpStatusBar(wx.StatusBar):
+
+    def __init__(self, parent):
+        super(DumpStatusBar, self).__init__(parent, -1)
+        # Nothing special to do here?
+
+
 class DumpGrid(gridlib.Grid):
 
-    def __init__(self, parent, data, dump_params={}):
+    def __init__(self, parent, data, dump_params={}, mouse_over=None):
         super(DumpGrid, self).__init__(parent, -1, style=wx.VSCROLL)
 
         self.parent = parent
@@ -144,6 +151,13 @@ class DumpGrid(gridlib.Grid):
         self.min_height = 16
         self.resize()
 
+        self.mouse_over = mouse_over
+        self.last_mouse_over = None
+        if self.mouse_over:
+            grid_window = self.GetGridWindow()
+            grid_window.Bind(wx.EVT_MOTION, self.on_mouse_over)
+            grid_window.Bind(wx.EVT_LEAVE_WINDOW, self.on_mouse_out)
+
         # Build up the menu we'll use
         self.menu = wx.Menu()
 
@@ -159,6 +173,24 @@ class DumpGrid(gridlib.Grid):
         self.item_bytes.Check(self.dump.width == 1)
         self.item_words.Check(self.dump.width == 4)
         self.PopupMenu(self.menu)
+
+    def on_mouse_over(self, event):
+        pos = self.CalcUnscrolledPosition(event.GetX(), event.GetY())
+        cell_pos = self.XYToCell(pos)
+        if self.last_mouse_over != cell_pos:
+            self.last_mouse_over = cell_pos
+            if cell_pos.Col >= self.dump.columns:
+                # They're over the text column
+                offset = None
+            else:
+                offset = self.dump.row_to_offset(cell_pos.Row) + cell_pos.Col * self.dump.width
+                if offset >= len(self.dump.data):
+                    offset = None
+            self.mouse_over(offset)
+
+    def on_mouse_out(self, event):
+        self.last_mouse_over = None
+        self.mouse_over(None)
 
     def SetWidth(self, width):
         self.dump.columns = int(self.dump.width * self.dump.columns / width)
@@ -207,20 +239,30 @@ class DumpGrid(gridlib.Grid):
         height = self.cellsize[1] * (self.dump.rows() + 1.5)
         return wx.Size(width, height)
 
+
 class DumpFrame(wx.Frame):
     """
     A Frame which can display arbitrary data.
     """
     good_height = 600
 
-    def __init__(self, title="Hex Dumper", data=b'', dump_params={}):
+    def __init__(self, title="Hex Dumper", data=b'', dump_params={}, cellinfo=None):
         self.data = data
         super(DumpFrame, self).__init__(None, -1, title=title)
 
         data = self.GetDumpData()
 
+        self.cellinfo = cellinfo
+
+        self.statusbar = None
+        mouse_over = None
+        if self.cellinfo:
+            self.statusbar = DumpStatusBar(self)
+            self.SetStatusBar(self.statusbar)
+            mouse_over = self.update_statusbar
+
         sizer = wx.BoxSizer(wx.VERTICAL)
-        self.grid = DumpGrid(self, data, dump_params=dump_params)
+        self.grid = DumpGrid(self, data, dump_params=dump_params, mouse_over=self.update_statusbar)
         sizer.Add(self.grid)
         self.SetSizer(sizer)
 
@@ -235,6 +277,17 @@ class DumpFrame(wx.Frame):
 
         (width, height) = self.grid.GetMinSize()
         self.SetMinClientSize(wx.Size(width, height))
+
+    def update_statusbar(self, offset):
+        """
+        Called when the mouse is over a new cell.
+
+        @param offset:  Data offset, or None if the pointer has moved out of the grid.
+        """
+        if offset is None:
+            self.statusbar.SetStatusText('')
+        else:
+            self.statusbar.SetStatusText(self.cellinfo(offset))
 
     def GetDumpData(self):
         return self.data
