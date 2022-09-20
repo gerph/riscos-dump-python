@@ -14,11 +14,56 @@ import dump
 
 
 class DumpTable(gridlib.GridTableBase):
+    colours = {
+            # Invalid cells
+            'invalid': ('white', 'black'),
 
-    def __init__(self, dump, data):
+            # Attributes for the main cells
+            'plain': ('white', 'black'),
+            'alpha': ('white', 'black'),
+            'number': ('white', 'black'),
+            'control': ('white', 'slate blue'),
+            'topbit': ('white', 'forest green'),
+
+            # Attributes applying to words or halfwords
+            'word': ('white', 'black'),
+            'halfword': ('white', 'black'),
+
+            # Attributes for the text column
+            'text': ('white', 'black')
+        }
+    dark_colours = {
+            # Invalid cells
+            'invalid': ('black', 'white'),
+
+            # Attributes for the main cells
+            'plain': ('black', 'white'),
+            'alpha': ('black', 'white'),
+            'number': ('black', 'white'),
+            'control': ('black', 'sky blue'),
+            'topbit': ('black', 'green'),
+
+            # Attributes applying to words or halfwords
+            'word': ('black', 'white'),
+            'halfword': ('black', 'white'),
+
+            # Attributes for the text column
+            'text': ('black', 'white')
+        }
+
+    def __init__(self, dump, data, dark_colours=True):
         self.dump = dump
         self.data = data
         super(DumpTable, self).__init__()
+
+        # Attributes applying to bytes
+        self.attributes = {}
+        colours = self.dark_colours if dark_colours else self.colours
+        for (name, cols) in colours.items():
+            attr = gridlib.GridCellAttr()
+            attr.SetBackgroundColour(cols[0])
+            attr.SetTextColour(cols[1])
+            self.attributes[name] = attr
 
         self.align_right = (wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
         self.align_left = (wx.ALIGN_LEFT, wx.ALIGN_CENTER)
@@ -62,6 +107,35 @@ class DumpTable(gridlib.GridTableBase):
 
     def GetCellAlignment(self, row, col):
         return self.column_alignment[col]
+
+    def GetAttr(self, row, col, kind):
+        (rowvalues, rowtext) = self.setup_row(row)
+        if not rowvalues:
+            attr = self.attributes['invalid']
+        else:
+            if col == self.dump.columns:
+                attr = self.attributes['text']
+            else:
+                if self.dump.width == 1:
+                    value = rowvalues[col]
+                    if value < 32 or value == 127:
+                        attr = self.attributes['control']
+                    elif (64 < value < 91) or (96 < value < 122):
+                        attr = self.attributes['alpha']
+                    elif (48 < value < 58):
+                        attr = self.attributes['number']
+                    elif value < 128:
+                        attr = self.attributes['plain']
+                    else:
+                        attr = self.attributes['topbit']
+                elif self.dump.width == 4:
+                    attr = self.attributes['word']
+                elif self.dump.width == 2:
+                    attr = self.attributes['halfword']
+                else:
+                    attr = self.attributes['invalid']
+        attr.IncRef()
+        return attr
 
     def GetValue(self, row, col):
         (rowvalues, rowtext) = self.setup_row(row)
