@@ -118,10 +118,10 @@ class MyApp(wx.App):
                                      "Hex Dumper: {}".format(filename),
                                      dump_params={
                                             'columns': 16,
-                                            'width': 1
+                                            'width': 1,
+                                            'annotation_func': lambda offset, address: 'Offset %i' % (offset,),
                                         },
-                                     cellinfo=lambda offset: 'Offset %i' % (offset,),
-                                     row_annotation=None) # lambda offset, address: 'Offset %i' % (offset,))
+                                     cellinfo=lambda offset: 'Offset %i' % (offset,))
         frame.Show()
 
     def MacOpenFile(self, filename):

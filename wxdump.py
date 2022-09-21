@@ -57,8 +57,7 @@ class DumpTable(gridlib.GridTableBase):
             'annotation': ('black', 'white'),
         }
 
-    def __init__(self, dump, data, dark_colours=True,
-                 row_annotation=None):
+    def __init__(self, dump, data, dark_colours=True):
 
         self.dump = dump
         self.data = data
@@ -72,9 +71,6 @@ class DumpTable(gridlib.GridTableBase):
             attr.SetBackgroundColour(cols[0])
             attr.SetTextColour(cols[1])
             self.attributes[name] = attr
-
-        self.row_annotation = row_annotation
-        self.row_annotation_label = 'Information'
 
         self.align_right = (wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
         self.align_left = (wx.ALIGN_LEFT, wx.ALIGN_CENTER)
@@ -98,7 +94,7 @@ class DumpTable(gridlib.GridTableBase):
 
     def GetNumberCols(self):
         columns = self.dump.columns + 1
-        if self.row_annotation:
+        if self.dump.annotation_func:
             columns += 1
         return columns
 
@@ -115,7 +111,7 @@ class DumpTable(gridlib.GridTableBase):
         if col == self.dump.columns:
             return self.dump.text_label
         if col == self.dump.columns + 1:
-            return self.row_annotation_label
+            return self.dump.annotation_label
         return self.headings[col]
 
     def GetRowLabelValue(self, row):
@@ -194,12 +190,7 @@ class DumpTable(gridlib.GridTableBase):
 
                 rowbytevalues = [ord(c) for c in rowdata]
                 rowtext = self.dump.format_chars(rowbytevalues)
-                if self.row_annotation:
-                    offset = self.dump.row_to_offset(row)
-                    address = offset + self.dump.address_base
-                    rowannotation = self.row_annotation(offset, address)
-                else:
-                    rowannotation = None
+                rowannotation = self.dump.format_annotation(row)
 
             if len(self.cache_rows) > self.cache_limit:
                 # Reset the cache so that we don't accumulate forever
@@ -221,7 +212,7 @@ class DumpStatusBar(wx.StatusBar):
 class DumpGrid(gridlib.Grid):
 
     def __init__(self, parent, data, dump_params={},
-                 mouse_over=None, row_annotation=None):
+                 mouse_over=None):
         super(DumpGrid, self).__init__(parent, -1, style=wx.VSCROLL)
 
         self.parent = parent
@@ -233,11 +224,9 @@ class DumpGrid(gridlib.Grid):
                 raise AttributeError("Dump parameter '{}' is not recognised".format(key))
             setattr(self.dump, key, value)
 
-        self.row_annotation = row_annotation
         self.row_annotation_size = 24
 
-        self.table = DumpTable(self.dump, self.data,
-                               row_annotation=row_annotation)
+        self.table = DumpTable(self.dump, self.data)
         self.SetTable(self.table, True)
 
         self.cellfont = wx.Font(12, wx.TELETYPE, wx.NORMAL, wx.NORMAL)
@@ -325,7 +314,7 @@ class DumpGrid(gridlib.Grid):
         for col in range(self.dump.columns):
             colsizes.append(self.cellsize[0])
         colsizes.append(self.textsize[0])
-        if self.row_annotation:
+        if self.dump.annotation_func:
             colsizes.append(self.annotationsize[0])
         colsizes[-1] += self.scrollbarsize
 
@@ -369,14 +358,13 @@ class DumpFrame(wx.Frame):
     good_height = 600
 
     def __init__(self, title="Hex Dumper", data=b'', dump_params={},
-                 cellinfo=None, row_annotation=None):
+                 cellinfo=None):
         self.data = data
         super(DumpFrame, self).__init__(None, -1, title=title)
 
         data = self.GetDumpData()
 
         self.cellinfo = cellinfo
-        self.row_annotation = row_annotation
 
         self.statusbar = None
         self.statusbar_height = 0
@@ -386,12 +374,10 @@ class DumpFrame(wx.Frame):
             self.SetStatusBar(self.statusbar)
             mouse_over = self.update_statusbar
             self.statusbar_height = self.statusbar.GetSize()[1]
-        row_annotation = row_annotation
 
         sizer = wx.BoxSizer(wx.VERTICAL)
         self.grid = DumpGrid(self, data, dump_params=dump_params,
-                             mouse_over=mouse_over,
-                             row_annotation=row_annotation)
+                             mouse_over=mouse_over)
         sizer.Add(self.grid)
         self.SetSizer(sizer)
 
