@@ -120,7 +120,8 @@ class MyApp(wx.App):
                                             'columns': 16,
                                             'width': 1
                                         },
-                                     cellinfo=lambda offset: 'Offset %i' % (offset,))
+                                     cellinfo=lambda offset: 'Offset %i' % (offset,),
+                                     row_annotation=None) # lambda offset, address: 'Offset %i' % (offset,))
         frame.Show()
 
     def MacOpenFile(self, filename):
