@@ -194,6 +194,8 @@ class DumpTable(gridlib.GridTableBase):
 
                 rowvalues = self.dump.row_values(row)
                 if len(rowvalues) < self.dump.columns:
+                    if not isinstance(rowvalues, list):
+                        rowvalues = list(rowvalues)
                     rowvalues += [None] * (self.dump.columns - len(rowvalues))
 
                 rowbytevalues = [ord(c) for c in rowdata]
@@ -266,10 +268,10 @@ class DumpGrid(gridlib.Grid):
         self.menu = wx.Menu()
 
         self.item_bytes = self.menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
-        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpwidth(1), self.item_bytes)
+        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(1), self.item_bytes)
 
         self.item_words = self.menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
-        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpwidth(4), self.item_words)
+        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
 
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
 
