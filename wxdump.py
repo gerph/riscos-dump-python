@@ -75,7 +75,7 @@ class DumpTable(gridlib.GridTableBase):
         self.align_right = (wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
         self.align_left = (wx.ALIGN_LEFT, wx.ALIGN_CENTER)
 
-        self.headings = self.dump.data_headings()
+        self.headings = [''] * self.dump.columns
         self.column_alignment = []
 
         # We keep a cache of the row data we've read from the Dump object, but discard once
@@ -83,10 +83,19 @@ class DumpTable(gridlib.GridTableBase):
         self.cache_limit = 400
         self.cache_rows = {}
 
+        self.update_content()
+
     def update_content(self):
         self.headings = self.dump.data_headings()
         self.column_alignment = [self.align_right] * self.dump.columns
-        self.column_alignment.append(self.align_left)
+
+        if self.dump.text:
+            self.headings.append(self.dump.text_label)
+            self.column_alignment.append(self.align_left)
+
+        if self.dump.annotations:
+            self.headings.append(self.dump.annotation_label)
+            self.column_alignment.append(self.align_left)
 
     def GetNumberRows(self):
         rowsize = self.dump.columns * self.dump.width
@@ -94,7 +103,7 @@ class DumpTable(gridlib.GridTableBase):
 
     def GetNumberCols(self):
         columns = self.dump.columns + 1
-        if self.dump.annotation_func:
+        if self.dump.annotations:
             columns += 1
         return columns
 
@@ -108,11 +117,10 @@ class DumpTable(gridlib.GridTableBase):
         return rowvalues[col] is None
 
     def GetColLabelValue(self, col):
-        if col == self.dump.columns:
-            return self.dump.text_label
-        if col == self.dump.columns + 1:
-            return self.dump.annotation_label
-        return self.headings[col]
+        if col < len(self.headings):
+            return self.headings[col]
+        else:
+            return ''
 
     def GetRowLabelValue(self, row):
         return self.dump.format_address(self.dump.row_to_offset(row)).upper()
@@ -314,7 +322,7 @@ class DumpGrid(gridlib.Grid):
         for col in range(self.dump.columns):
             colsizes.append(self.cellsize[0])
         colsizes.append(self.textsize[0])
-        if self.dump.annotation_func:
+        if self.dump.annotations:
             colsizes.append(self.annotationsize[0])
         colsizes[-1] += self.scrollbarsize
 
