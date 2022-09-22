@@ -114,6 +114,10 @@ class MyApp(wx.App):
 
     def OpenFileMessage(self, filename):
         print("Open %s" % (filename,))
+
+        def dummy_menu_item(dump, chosen=False):
+            print("Dummy menu entry chosen")
+
         frame = wxdump.DumpFileFrame(filename,
                                      "Hex Dumper: {}".format(filename),
                                      dump_params={
@@ -122,7 +126,8 @@ class MyApp(wx.App):
                                             'annotation_func': lambda offset, address: 'Offset %i' % (offset,),
                                             'annotations': True,
                                         },
-                                     cellinfo=lambda offset: 'Offset %i' % (offset,))
+                                     cellinfo=lambda offset: 'Offset %i' % (offset,),
+                                     menu_extra=[('Dummy menu entry', dummy_menu_item)])
         frame.Show()
 
     def MacOpenFile(self, filename):

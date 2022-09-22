@@ -222,11 +222,14 @@ class DumpStatusBar(wx.StatusBar):
 class DumpGrid(gridlib.Grid):
 
     def __init__(self, parent, data, dump_params={},
-                 mouse_over=None):
+                 mouse_over=None,
+                 menu_extra=None):
         super(DumpGrid, self).__init__(parent, -1, style=wx.VSCROLL)
 
         self.parent = parent
         self.data = data
+        self.menu_extra = menu_extra or []
+        self.menu_items = []
         self.dump = dump.DumpBase()
         self.dump.data = data
         for key, value in dump_params.items():
@@ -276,12 +279,39 @@ class DumpGrid(gridlib.Grid):
         self.item_words = self.menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
         self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
 
+        self.add_menu_extra(self.menu)
+
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
+
+    def add_menu_extra(self, menu):
+        if self.menu_extra:
+            menu.AppendSeparator()
+            for item in self.menu_extra:
+                name = item[0]
+                func = item[1]
+                if len(item) > 2:
+                    checked = item[2]
+                else:
+                    checked = None
+                menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if checked is None else wx.ITEM_CHECK)
+                self.menu_items.append((menuitem, name, func, checked))
+                self.Bind(wx.EVT_MENU, lambda event: func(self.dump, chosen=True), menuitem)
+                if checked is not None:
+                    menuitem.Check(checked)
 
     def on_popup_menu(self, event):
         self.item_bytes.Check(self.dump.width == 1)
         self.item_halfwords.Check(self.dump.width == 2)
         self.item_words.Check(self.dump.width == 4)
+
+        for extra in self.menu_items:
+            if extra[3] is not None:
+                # This is a checkable box.
+                menuitem = extra[0]
+                func = extra[2]
+                state = func(self.dump, chosen=False)
+                menuitem.Check(checked)
+
         self.PopupMenu(self.menu)
 
     def on_mouse_over(self, event):
@@ -372,7 +402,7 @@ class DumpFrame(wx.Frame):
     good_height = 600
 
     def __init__(self, title="Hex Dumper", data=b'', dump_params={},
-                 cellinfo=None):
+                 cellinfo=None, menu_extra=None):
         self.data = data
         super(DumpFrame, self).__init__(None, -1, title=title)
 
@@ -391,7 +421,7 @@ class DumpFrame(wx.Frame):
 
         sizer = wx.BoxSizer(wx.VERTICAL)
         self.grid = DumpGrid(self, data, dump_params=dump_params,
-                             mouse_over=mouse_over)
+                             mouse_over=mouse_over, menu_extra=menu_extra)
         sizer.Add(self.grid)
         self.SetSizer(sizer)
 
