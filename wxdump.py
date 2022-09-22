@@ -270,6 +270,9 @@ class DumpGrid(gridlib.Grid):
         self.item_bytes = self.menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
         self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(1), self.item_bytes)
 
+        self.item_halfwords = self.menu.Append(-1, "Half words", kind=wx.ITEM_CHECK)
+        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(2), self.item_halfwords)
+
         self.item_words = self.menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
         self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
 
@@ -277,6 +280,7 @@ class DumpGrid(gridlib.Grid):
 
     def on_popup_menu(self, event):
         self.item_bytes.Check(self.dump.width == 1)
+        self.item_halfwords.Check(self.dump.width == 2)
         self.item_words.Check(self.dump.width == 4)
         self.PopupMenu(self.menu)
 
