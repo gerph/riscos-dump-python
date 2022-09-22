@@ -77,6 +77,12 @@ class DumpBase(object):
         """
         return self.columns * self.width * row
 
+    def offset_to_row(self, offset):
+        """
+        Convert from a data offset to a row number.
+        """
+        return int(offset / (self.columns * self.width))
+
     def rows(self):
         """
         Return the number of rows present.

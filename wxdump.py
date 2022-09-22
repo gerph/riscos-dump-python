@@ -296,7 +296,7 @@ class DumpGrid(gridlib.Grid):
                     checked = None
                 menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if checked is None else wx.ITEM_CHECK)
                 self.menu_items.append((menuitem, name, func, checked))
-                self.Bind(wx.EVT_MENU, lambda event: func(self, self.dump, chosen=True), menuitem)
+                self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
                 if checked is not None:
                     menuitem.Check(checked)
 
@@ -332,6 +332,25 @@ class DumpGrid(gridlib.Grid):
     def on_mouse_out(self, event):
         self.last_mouse_over = None
         self.mouse_over(None)
+
+    def GetVisibleRange(self):
+        # Get the position of the visible cells
+        ux, uy = self.GetScrollPixelsPerUnit()
+        sx, sy = self.GetViewStart()
+        w, h = self.GetGridWindow().GetClientSize().Get()
+        sx *= ux ; sy *= uy
+
+        x0 = max(self.XToCol(sx), 0)
+        y0 = max(self.YToRow(sy), 0)
+        x1 = min(self.XToCol(sx + w, True), self.table.GetNumberCols() - 1)
+        y1 = min(self.YToRow(sy + h, True), self.table.GetNumberRows() - 1)
+
+        return (x0, y0, x1, y1)
+
+    def ScrollToRow(self, row):
+        ux, uy = self.GetScrollPixelsPerUnit()
+        (x0, y0, x1, y1) = self.CellToRect(row, 0)
+        self.Scroll(x0 / ux, y0 / uy)
 
     def SetDumpWidth(self, width):
         self.dump.columns = int(self.dump.width * self.dump.columns / width)
