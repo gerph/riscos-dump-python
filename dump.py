@@ -99,7 +99,7 @@ class DumpBase(object):
             if self.annotation_func:
                 offset = self.row_to_offset(row)
                 address = offset + self.address_base
-                note = self.annotation_func(offset, address) or ''
+                note = self.annotation_func(self, row, offset, address) or ''
             else:
                 note = ''
             return note

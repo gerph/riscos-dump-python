@@ -223,7 +223,8 @@ class DumpGrid(gridlib.Grid):
 
     def __init__(self, parent, data, dump_params={},
                  mouse_over=None,
-                 menu_extra=None):
+                 menu_extra=None,
+                 row_annotation_size=24):
         super(DumpGrid, self).__init__(parent, -1, style=wx.VSCROLL)
 
         self.parent = parent
@@ -237,7 +238,7 @@ class DumpGrid(gridlib.Grid):
                 raise AttributeError("Dump parameter '{}' is not recognised".format(key))
             setattr(self.dump, key, value)
 
-        self.row_annotation_size = 24
+        self.row_annotation_size = row_annotation_size
 
         self.table = DumpTable(self.dump, self.data)
         self.SetTable(self.table, True)
@@ -295,7 +296,7 @@ class DumpGrid(gridlib.Grid):
                     checked = None
                 menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if checked is None else wx.ITEM_CHECK)
                 self.menu_items.append((menuitem, name, func, checked))
-                self.Bind(wx.EVT_MENU, lambda event: func(self.dump, chosen=True), menuitem)
+                self.Bind(wx.EVT_MENU, lambda event: func(self, self.dump, chosen=True), menuitem)
                 if checked is not None:
                     menuitem.Check(checked)
 
@@ -309,8 +310,8 @@ class DumpGrid(gridlib.Grid):
                 # This is a checkable box.
                 menuitem = extra[0]
                 func = extra[2]
-                state = func(self.dump, chosen=False)
-                menuitem.Check(checked)
+                state = func(self, self.dump, chosen=False)
+                menuitem.Check(state)
 
         self.PopupMenu(self.menu)
 
@@ -335,6 +336,14 @@ class DumpGrid(gridlib.Grid):
     def SetDumpWidth(self, width):
         self.dump.columns = int(self.dump.width * self.dump.columns / width)
         self.dump.width = width
+
+        self.table = DumpTable(self.dump, self.data)
+        self.SetTable(self.table, True)
+        self.resize()
+        self.parent.resize()
+
+    def SetDumpColumns(self, columns):
+        self.dump.columns = columns
 
         self.table = DumpTable(self.dump, self.data)
         self.SetTable(self.table, True)
@@ -402,7 +411,7 @@ class DumpFrame(wx.Frame):
     good_height = 600
 
     def __init__(self, title="Hex Dumper", data=b'', dump_params={},
-                 cellinfo=None, menu_extra=None):
+                 cellinfo=None, menu_extra=None, row_annotation_size=24):
         self.data = data
         super(DumpFrame, self).__init__(None, -1, title=title)
 
@@ -421,7 +430,8 @@ class DumpFrame(wx.Frame):
 
         sizer = wx.BoxSizer(wx.VERTICAL)
         self.grid = DumpGrid(self, data, dump_params=dump_params,
-                             mouse_over=mouse_over, menu_extra=menu_extra)
+                             mouse_over=mouse_over, menu_extra=menu_extra,
+                             row_annotation_size=row_annotation_size)
         sizer.Add(self.grid)
         self.SetSizer(sizer)
 
