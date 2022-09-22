@@ -30,7 +30,10 @@ class DumpTable(gridlib.GridTableBase):
             'halfword': ('white', 'black'),
 
             # Attributes for the text column
-            'text': ('white', 'black')
+            'text': ('white', 'black'),
+
+            # Attributes for the annotation column
+            'annotation': ('white', 'black'),
         }
     dark_colours = {
             # Invalid cells
@@ -48,10 +51,14 @@ class DumpTable(gridlib.GridTableBase):
             'halfword': ('black', 'white'),
 
             # Attributes for the text column
-            'text': ('black', 'white')
+            'text': ('black', 'white'),
+
+            # Attributes for the annotation column
+            'annotation': ('black', 'white'),
         }
 
     def __init__(self, dump, data, dark_colours=True):
+
         self.dump = dump
         self.data = data
         super(DumpTable, self).__init__()
@@ -68,7 +75,7 @@ class DumpTable(gridlib.GridTableBase):
         self.align_right = (wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
         self.align_left = (wx.ALIGN_LEFT, wx.ALIGN_CENTER)
 
-        self.headings = self.dump.data_headings()
+        self.headings = [''] * self.dump.columns
         self.column_alignment = []
 
         # We keep a cache of the row data we've read from the Dump object, but discard once
@@ -76,31 +83,44 @@ class DumpTable(gridlib.GridTableBase):
         self.cache_limit = 400
         self.cache_rows = {}
 
+        self.update_content()
+
     def update_content(self):
         self.headings = self.dump.data_headings()
         self.column_alignment = [self.align_right] * self.dump.columns
-        self.column_alignment.append(self.align_left)
+
+        if self.dump.text:
+            self.headings.append(self.dump.text_label)
+            self.column_alignment.append(self.align_left)
+
+        if self.dump.annotations:
+            self.headings.append(self.dump.annotation_label)
+            self.column_alignment.append(self.align_left)
 
     def GetNumberRows(self):
         rowsize = self.dump.columns * self.dump.width
         return int((len(self.data) + rowsize - 1) / rowsize)
 
     def GetNumberCols(self):
-        return self.dump.columns + 1
+        columns = self.dump.columns + 1
+        if self.dump.annotations:
+            columns += 1
+        return columns
 
     def IsEmptyCell(self, row, col):
-        if col == self.dump.columns:
-            # The text column is always valid
+        if col >= self.dump.columns:
+            # The text/annotation column is always valid
             return False
-        (rowvalues, rowtext) = self.setup_row(row)
+        (rowvalues, rowtext, rowannotation) = self.setup_row(row)
         if not rowvalues:
             return True
         return rowvalues[col] is None
 
     def GetColLabelValue(self, col):
-        if col == self.dump.columns:
-            return self.dump.text_label
-        return self.headings[col]
+        if col < len(self.headings):
+            return self.headings[col]
+        else:
+            return ''
 
     def GetRowLabelValue(self, row):
         return self.dump.format_address(self.dump.row_to_offset(row)).upper()
@@ -109,12 +129,14 @@ class DumpTable(gridlib.GridTableBase):
         return self.column_alignment[col]
 
     def GetAttr(self, row, col, kind):
-        (rowvalues, rowtext) = self.setup_row(row)
+        (rowvalues, rowtext, rowannotation) = self.setup_row(row)
         if not rowvalues:
             attr = self.attributes['invalid']
         else:
             if col == self.dump.columns:
                 attr = self.attributes['text']
+            elif col == self.dump.columns + 1:
+                attr = self.attributes['annotation']
             else:
                 if self.dump.width == 1:
                     value = rowvalues[col]
@@ -138,7 +160,7 @@ class DumpTable(gridlib.GridTableBase):
         return attr
 
     def GetValue(self, row, col):
-        (rowvalues, rowtext) = self.setup_row(row)
+        (rowvalues, rowtext, rowannotation) = self.setup_row(row)
         if not rowvalues:
             return '<invalid>'
 
@@ -154,8 +176,10 @@ class DumpTable(gridlib.GridTableBase):
             elif width == 2:
                 return '{:04X}'.format(value)
             return value
-        else:
+        elif col == self.dump.columns:
             return rowtext
+        else:
+            return rowannotation
 
     def setup_row(self, row):
         if row not in self.cache_rows:
@@ -165,21 +189,25 @@ class DumpTable(gridlib.GridTableBase):
                 # No data, so these cells are empty
                 rowvalues = [None] * self.dump.columns
                 rowtext = ''
+                rowannotation = ''
             else:
 
                 rowvalues = self.dump.row_values(row)
                 if len(rowvalues) < self.dump.columns:
+                    if not isinstance(rowvalues, list):
+                        rowvalues = list(rowvalues)
                     rowvalues += [None] * (self.dump.columns - len(rowvalues))
 
                 rowbytevalues = [ord(c) for c in rowdata]
                 rowtext = self.dump.format_chars(rowbytevalues)
+                rowannotation = self.dump.format_annotation(row)
 
             if len(self.cache_rows) > self.cache_limit:
                 # Reset the cache so that we don't accumulate forever
                 #print("Clear row cache")
                 self.cache_rows = {}
 
-            self.cache_rows[row] = (rowvalues, rowtext)
+            self.cache_rows[row] = (rowvalues, rowtext, rowannotation)
 
         return self.cache_rows[row]
 
@@ -193,7 +221,8 @@ class DumpStatusBar(wx.StatusBar):
 
 class DumpGrid(gridlib.Grid):
 
-    def __init__(self, parent, data, dump_params={}, mouse_over=None):
+    def __init__(self, parent, data, dump_params={},
+                 mouse_over=None):
         super(DumpGrid, self).__init__(parent, -1, style=wx.VSCROLL)
 
         self.parent = parent
@@ -204,6 +233,8 @@ class DumpGrid(gridlib.Grid):
             if getattr(self.dump, key, Ellipsis) is Ellipsis:
                 raise AttributeError("Dump parameter '{}' is not recognised".format(key))
             setattr(self.dump, key, value)
+
+        self.row_annotation_size = 24
 
         self.table = DumpTable(self.dump, self.data)
         self.SetTable(self.table, True)
@@ -221,6 +252,7 @@ class DumpGrid(gridlib.Grid):
         self.cellsize = (16 * 2, 16)
         self.labelsize = (16 * 8, 16)
         self.textsize = (16 * 16, 16)
+        self.annotationsize = (24 * 16, 16)
         self.min_width = 16
         self.min_height = 16
         self.resize()
@@ -236,10 +268,10 @@ class DumpGrid(gridlib.Grid):
         self.menu = wx.Menu()
 
         self.item_bytes = self.menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
-        self.Bind(wx.EVT_MENU, lambda event: self.SetWidth(1), self.item_bytes)
+        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(1), self.item_bytes)
 
         self.item_words = self.menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
-        self.Bind(wx.EVT_MENU, lambda event: self.SetWidth(4), self.item_words)
+        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
 
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
 
@@ -266,7 +298,7 @@ class DumpGrid(gridlib.Grid):
         self.last_mouse_over = None
         self.mouse_over(None)
 
-    def SetWidth(self, width):
+    def SetDumpWidth(self, width):
         self.dump.columns = int(self.dump.width * self.dump.columns / width)
         self.dump.width = width
 
@@ -282,13 +314,26 @@ class DumpGrid(gridlib.Grid):
         dc.SetFont(self.cellfont)
         self.labelsize = dc.GetTextExtent('M' * 9)
         self.cellsize = dc.GetTextExtent('0' * (self.dump.width * 2 + 1))
-        self.textsize = dc.GetTextExtent('M' * (self.dump.width * self.dump.columns + 3))
+        self.textsize = dc.GetTextExtent('M' * (self.dump.width * self.dump.columns + 1))
+        self.annotationsize = dc.GetTextExtent('M' * (self.row_annotation_size + 1))
+        # FIXME: This is wrong, but it's about the right sort of size
+        self.scrollbarsize = dc.GetTextExtent('M' * 2)[0]
 
+        # Set the column widths
+        colsizes = []
         for col in range(self.dump.columns):
-            self.SetColSize(col, self.cellsize[0])
+            colsizes.append(self.cellsize[0])
+        colsizes.append(self.textsize[0])
+        if self.dump.annotations:
+            colsizes.append(self.annotationsize[0])
+        colsizes[-1] += self.scrollbarsize
+
+        for col, size in enumerate(colsizes):
+            self.SetColSize(col, size)
+
+        # The column lable height
         self.SetColLabelSize(int(self.cellsize[1] * 1.5))
 
-        self.SetColSize(self.dump.columns, self.textsize[0])
         self.min_height = int(self.textsize[1] * 1.5)
 
         self.SetRowLabelSize(self.labelsize[0])
@@ -309,7 +354,7 @@ class DumpGrid(gridlib.Grid):
         return wx.Size(self.min_width, self.min_height)
 
     def GetBestSize(self):
-        rect = self.CellToRect(self.dump.rows() - 1, self.dump.columns)
+        rect = self.CellToRect(self.table.GetNumberRows() - 1, self.table.GetNumberCols() - 1)
         cells_width = rect.Right + self.labelsize[0]
         cells_height = rect.Bottom + int(self.cellsize[1] * 1.5) + 1
         return wx.Size(cells_width,
@@ -322,7 +367,8 @@ class DumpFrame(wx.Frame):
     """
     good_height = 600
 
-    def __init__(self, title="Hex Dumper", data=b'', dump_params={}, cellinfo=None):
+    def __init__(self, title="Hex Dumper", data=b'', dump_params={},
+                 cellinfo=None):
         self.data = data
         super(DumpFrame, self).__init__(None, -1, title=title)
 
@@ -340,7 +386,8 @@ class DumpFrame(wx.Frame):
             self.statusbar_height = self.statusbar.GetSize()[1]
 
         sizer = wx.BoxSizer(wx.VERTICAL)
-        self.grid = DumpGrid(self, data, dump_params=dump_params, mouse_over=mouse_over)
+        self.grid = DumpGrid(self, data, dump_params=dump_params,
+                             mouse_over=mouse_over)
         sizer.Add(self.grid)
         self.SetSizer(sizer)
 

@@ -38,6 +38,9 @@ class DumpBase(object):
 
         self.address_label = 'Offset'
         self.text_label = 'Text'
+        self.annotation_label = 'Notes'
+        self.annotation_func = None
+        self.annotations = False
         self.text_high = False
         self.text = True
         self.little_endian = True
@@ -58,6 +61,14 @@ class DumpBase(object):
         else:
             headings.extend('+{:X}'.format(v) for v in range(0, maxoffset, self.width))
 
+        return headings
+
+    def headings(self):
+        headings = self.data_headings()
+        if self.text:
+            headings.append(self.text_label)
+        if self.annotations:
+            headings.append(self.annotation_label)
         return headings
 
     def row_to_offset(self, row):
@@ -82,6 +93,17 @@ class DumpBase(object):
         else:
             valid = lambda c: c >= 32 and c < 0x7f
         return ''.join(chr(c) if valid(c) else '.' for c in data)
+
+    def format_annotation(self, row):
+        if self.annotations:
+            if self.annotation_func:
+                offset = self.row_to_offset(row)
+                address = offset + self.address_base
+                note = self.annotation_func(offset, address) or ''
+            else:
+                note = ''
+            return note
+        return None
 
     def row_data(self, row):
         """
@@ -181,12 +203,16 @@ class Dump(DumpBase):
             rowtext = ''
 
         rowtitle = self.format_address(offset)
+        rownote = ''
+        if self.annotations:
+            rownote = " : {}".format(self.format_annotation(row_count))
 
-        return "{}{} :{}{}{}{}".format(self.indent, rowtitle,
-                                       ' ' if self.pad_data else '',
-                                       rowdesc,
-                                       ' ' if self.pad_data else '',
-                                       rowtext)
+        return "{}{} :{}{}{}{}{}".format(self.indent, rowtitle,
+                                         ' ' if self.pad_data else '',
+                                         rowdesc,
+                                         ' ' if self.pad_data else '',
+                                         rowtext,
+                                         rownote)
 
     def update_prefix_chars(self):
         self.prefix_chars = {}
