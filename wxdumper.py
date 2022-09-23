@@ -115,7 +115,7 @@ class MyApp(wx.App):
     def OpenFileMessage(self, filename):
         print("Open %s" % (filename,))
 
-        def dummy_menu_item(dump, chosen=False):
+        def dummy_menu_item(grid, dump, chosen=False):
             print("Dummy menu entry chosen")
 
         config = wxdump.WxDumpConfigDark()

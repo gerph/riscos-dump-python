@@ -15,6 +15,10 @@ import dump
 
 class WxDumpConfig(object):
     colours = {
+            # Grid lines and the cursor
+            'grid': ('grey', None),
+            'cursor': ('blue', None),
+
             # Invalid cells
             'invalid': ('white', 'black'),
 
@@ -95,6 +99,10 @@ class WxDumpConfig(object):
 
 class WxDumpConfigDark(WxDumpConfig):
     colours = {
+            # Grid lines and the cursor
+            'grid': ('grey', None),
+            'cursor': ('blue', None),
+
             # Invalid cells
             'invalid': ('black', 'white'),
 
@@ -295,6 +303,12 @@ class DumpGrid(gridlib.Grid):
 
         self.table = DumpTable(self.dump, self.data, self.config)
         self.SetTable(self.table, True)
+
+        cursor_colour = self.table.attributes['cursor'].BackgroundColour
+        self.SetCellHighlightColour(cursor_colour)
+        # FIXME: Grid isn't configurable yet.
+        grid_colour = self.table.attributes['grid'].BackgroundColour
+        self.SetGridLineColour(grid_colour)
 
         self.cellfont = wx.Font(12, wx.TELETYPE, wx.NORMAL, wx.NORMAL)
         self.SetDefaultCellFont(self.cellfont)
