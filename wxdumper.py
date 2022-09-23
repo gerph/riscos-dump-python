@@ -118,16 +118,20 @@ class MyApp(wx.App):
         def dummy_menu_item(dump, chosen=False):
             print("Dummy menu entry chosen")
 
+        config = wxdump.WxDumpConfigDark()
+        config.cellinfo=lambda offset: 'Offset %i' % (offset,)
+        config.menu_extra=[('Dummy menu entry', dummy_menu_item)]
+        config.dump_params = {
+                                'columns': 16,
+                                'width': 1,
+                                'annotation_func': lambda grid, row, offset, address: 'Offset %i' % (offset,),
+                                'annotations': True,
+                             }
+        config.frame_statusbar = True
+
         frame = wxdump.DumpFileFrame(filename,
                                      "Hex Dumper: {}".format(filename),
-                                     dump_params={
-                                            'columns': 16,
-                                            'width': 1,
-                                            'annotation_func': lambda offset, address: 'Offset %i' % (offset,),
-                                            'annotations': True,
-                                        },
-                                     cellinfo=lambda offset: 'Offset %i' % (offset,),
-                                     menu_extra=[('Dummy menu entry', dummy_menu_item)])
+                                     config=config)
         frame.Show()
 
     def MacOpenFile(self, filename):

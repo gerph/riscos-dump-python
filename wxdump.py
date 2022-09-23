@@ -13,7 +13,7 @@ import wx.grid as gridlib
 import dump
 
 
-class DumpTable(gridlib.GridTableBase):
+class WxDumpConfig(object):
     colours = {
             # Invalid cells
             'invalid': ('white', 'black'),
@@ -35,7 +35,66 @@ class DumpTable(gridlib.GridTableBase):
             # Attributes for the annotation column
             'annotation': ('white', 'black'),
         }
-    dark_colours = {
+
+    # Parameters to pass on to the Dump object
+    dump_params = {}
+
+    # Number of characters in the row annotations
+    row_annotation_size = 24
+
+    # Extra menu entries as a list of tuples:
+    #   (menu item title, function to call, selection state)
+    #   selection state: False for non-check function
+    #                    True for selected item
+    #   function has the args (grid, dump, chosen)
+    #   chosen is the selection state when selected, or None to read state
+    menu_extra = []
+
+    # How many rows we will cache at a time
+    row_cache_limit = 400
+
+    # How high the default size of the frame should be
+    frame_max_height = 600
+
+    # Status bar enable
+    frame_statusbar = False
+
+    byte_colour = [0] * 256
+    for b in range(256):
+        if b < 32 or b == 127:
+            colour_name = 'control'
+        elif (64 < b < 91) or (96 < b < 122):
+            colour_name = 'alpha'
+        elif (48 < b < 58):
+            colour_name = 'number'
+        elif b < 128:
+            colour_name = 'plain'
+        else:
+            colour_name = 'topbit'
+
+        byte_colour[b] = colour_name
+
+    def cell_info(self, offset):
+        """
+        Information about a given offset, used by the Frame code.
+
+        @param offset:  The offset to get information from
+
+        @return:    Status bar text for this offset, or None
+        """
+        return None
+
+    def mouse_over(self, offset):
+        """
+        Called when the mouse is over a new cell.
+
+        @param offset:  Data offset, or None if the pointer has moved out of the grid.
+        """
+        pass
+
+
+class WxDumpConfigDark(WxDumpConfig):
+    colours = {
             # Invalid cells
             'invalid': ('black', 'white'),
 
@@ -57,15 +116,19 @@ class DumpTable(gridlib.GridTableBase):
             'annotation': ('black', 'white'),
         }
 
-    def __init__(self, dump, data, dark_colours=True):
 
+class DumpTable(gridlib.GridTableBase):
+
+    def __init__(self, dump, data, config):
+
+        self.config = config
         self.dump = dump
         self.data = data
         super(DumpTable, self).__init__()
 
         # Attributes applying to bytes
         self.attributes = {}
-        colours = self.dark_colours if dark_colours else self.colours
+        colours = self.config.colours
         for (name, cols) in colours.items():
             attr = gridlib.GridCellAttr()
             attr.SetBackgroundColour(cols[0])
@@ -80,8 +143,8 @@ class DumpTable(gridlib.GridTableBase):
 
         # We keep a cache of the row data we've read from the Dump object, but discard once
         # we reache this limit.
-        self.cache_limit = 400
-        self.cache_rows = {}
+        self.row_cache_limit = config.row_cache_limit
+        self.row_cache = {}
 
         self.update_content()
 
@@ -140,16 +203,11 @@ class DumpTable(gridlib.GridTableBase):
             else:
                 if self.dump.width == 1:
                     value = rowvalues[col]
-                    if value < 32 or value == 127:
-                        attr = self.attributes['control']
-                    elif (64 < value < 91) or (96 < value < 122):
-                        attr = self.attributes['alpha']
-                    elif (48 < value < 58):
-                        attr = self.attributes['number']
-                    elif value < 128:
-                        attr = self.attributes['plain']
+                    if value is None:
+                        colour_name = 'invalid'
                     else:
-                        attr = self.attributes['topbit']
+                        colour_name = self.config.byte_colour[value]
+                    attr = self.attributes[colour_name]
                 elif self.dump.width == 4:
                     attr = self.attributes['word']
                 elif self.dump.width == 2:
@@ -182,7 +240,7 @@ class DumpTable(gridlib.GridTableBase):
             return rowannotation
 
     def setup_row(self, row):
-        if row not in self.cache_rows:
+        if row not in self.row_cache:
 
             rowdata = self.dump.row_data(row)
             if not rowdata:
@@ -202,14 +260,14 @@ class DumpTable(gridlib.GridTableBase):
                 rowtext = self.dump.format_chars(rowbytevalues)
                 rowannotation = self.dump.format_annotation(row)
 
-            if len(self.cache_rows) > self.cache_limit:
+            if len(self.row_cache) > self.row_cache_limit:
                 # Reset the cache so that we don't accumulate forever
                 #print("Clear row cache")
-                self.cache_rows = {}
+                self.row_cache = {}
 
-            self.cache_rows[row] = (rowvalues, rowtext, rowannotation)
+            self.row_cache[row] = (rowvalues, rowtext, rowannotation)
 
-        return self.cache_rows[row]
+        return self.row_cache[row]
 
 
 class DumpStatusBar(wx.StatusBar):
@@ -221,26 +279,21 @@ class DumpStatusBar(wx.StatusBar):
 
 class DumpGrid(gridlib.Grid):
 
-    def __init__(self, parent, data, dump_params={},
-                 mouse_over=None,
-                 menu_extra=None,
-                 row_annotation_size=24):
+    def __init__(self, parent, data, config=None):
         super(DumpGrid, self).__init__(parent, -1, style=wx.VSCROLL)
 
+        self.config = config or WxDumpConfig()
         self.parent = parent
         self.data = data
-        self.menu_extra = menu_extra or []
         self.menu_items = []
         self.dump = dump.DumpBase()
         self.dump.data = data
-        for key, value in dump_params.items():
+        for key, value in self.config.dump_params.items():
             if getattr(self.dump, key, Ellipsis) is Ellipsis:
                 raise AttributeError("Dump parameter '{}' is not recognised".format(key))
             setattr(self.dump, key, value)
 
-        self.row_annotation_size = row_annotation_size
-
-        self.table = DumpTable(self.dump, self.data)
+        self.table = DumpTable(self.dump, self.data, self.config)
         self.SetTable(self.table, True)
 
         self.cellfont = wx.Font(12, wx.TELETYPE, wx.NORMAL, wx.NORMAL)
@@ -261,12 +314,10 @@ class DumpGrid(gridlib.Grid):
         self.min_height = 16
         self.resize()
 
-        self.mouse_over = mouse_over
         self.last_mouse_over = None
-        if self.mouse_over:
-            grid_window = self.GetGridWindow()
-            grid_window.Bind(wx.EVT_MOTION, self.on_mouse_over)
-            grid_window.Bind(wx.EVT_LEAVE_WINDOW, self.on_mouse_out)
+        self.grid_window = self.GetGridWindow()
+        self.grid_window.Bind(wx.EVT_MOTION, self.on_mouse_over)
+        self.grid_window.Bind(wx.EVT_LEAVE_WINDOW, self.on_mouse_out)
 
         # Build up the menu we'll use
         self.menu = wx.Menu()
@@ -285,20 +336,18 @@ class DumpGrid(gridlib.Grid):
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
 
     def add_menu_extra(self, menu):
-        if self.menu_extra:
+        if self.config.menu_extra:
             menu.AppendSeparator()
-            for item in self.menu_extra:
+            for item in self.config.menu_extra:
                 name = item[0]
                 func = item[1]
                 if len(item) > 2:
                     checked = item[2]
                 else:
-                    checked = None
-                menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if checked is None else wx.ITEM_CHECK)
+                    checked = False
+                menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if not checked else wx.ITEM_CHECK)
                 self.menu_items.append((menuitem, name, func, checked))
                 self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
-                if checked is not None:
-                    menuitem.Check(checked)
 
     def on_popup_menu(self, event):
         self.item_bytes.Check(self.dump.width == 1)
@@ -306,7 +355,7 @@ class DumpGrid(gridlib.Grid):
         self.item_words.Check(self.dump.width == 4)
 
         for extra in self.menu_items:
-            if extra[3] is not None:
+            if extra[3]:
                 # This is a checkable box.
                 menuitem = extra[0]
                 func = extra[2]
@@ -327,18 +376,19 @@ class DumpGrid(gridlib.Grid):
                 offset = self.dump.row_to_offset(cell_pos.Row) + cell_pos.Col * self.dump.width
                 if offset >= len(self.dump.data):
                     offset = None
-            self.mouse_over(offset)
+            self.config.mouse_over(offset)
 
     def on_mouse_out(self, event):
         self.last_mouse_over = None
-        self.mouse_over(None)
+        self.config.mouse_over(None)
 
     def GetVisibleRange(self):
         # Get the position of the visible cells
         ux, uy = self.GetScrollPixelsPerUnit()
         sx, sy = self.GetViewStart()
         w, h = self.GetGridWindow().GetClientSize().Get()
-        sx *= ux ; sy *= uy
+        sx *= ux
+        sy *= uy
 
         x0 = max(self.XToCol(sx), 0)
         y0 = max(self.YToRow(sy), 0)
@@ -356,7 +406,7 @@ class DumpGrid(gridlib.Grid):
         self.dump.columns = int(self.dump.width * self.dump.columns / width)
         self.dump.width = width
 
-        self.table = DumpTable(self.dump, self.data)
+        self.table = DumpTable(self.dump, self.data, config=self.config)
         self.SetTable(self.table, True)
         self.resize()
         self.parent.resize()
@@ -364,7 +414,7 @@ class DumpGrid(gridlib.Grid):
     def SetDumpColumns(self, columns):
         self.dump.columns = columns
 
-        self.table = DumpTable(self.dump, self.data)
+        self.table = DumpTable(self.dump, self.data, config=self.config)
         self.SetTable(self.table, True)
         self.resize()
         self.parent.resize()
@@ -377,7 +427,7 @@ class DumpGrid(gridlib.Grid):
         self.labelsize = dc.GetTextExtent('M' * 9)
         self.cellsize = dc.GetTextExtent('0' * (self.dump.width * 2 + 1))
         self.textsize = dc.GetTextExtent('M' * (self.dump.width * self.dump.columns + 1))
-        self.annotationsize = dc.GetTextExtent('M' * (self.row_annotation_size + 1))
+        self.annotationsize = dc.GetTextExtent('M' * (self.config.row_annotation_size + 1))
         # FIXME: This is wrong, but it's about the right sort of size
         self.scrollbarsize = dc.GetTextExtent('M' * 2)[0]
 
@@ -427,30 +477,26 @@ class DumpFrame(wx.Frame):
     """
     A Frame which can display arbitrary data.
     """
-    good_height = 600
 
-    def __init__(self, title="Hex Dumper", data=b'', dump_params={},
-                 cellinfo=None, menu_extra=None, row_annotation_size=24):
+    def __init__(self, title="Hex Dumper", data=b'', config=None):
+
+        self.config = config or WxDumpConfig()
         self.data = data
         super(DumpFrame, self).__init__(None, -1, title=title)
 
         data = self.GetDumpData()
 
-        self.cellinfo = cellinfo
-
         self.statusbar = None
         self.statusbar_height = 0
         mouse_over = None
-        if self.cellinfo:
+        if self.config.frame_statusbar:
             self.statusbar = DumpStatusBar(self)
             self.SetStatusBar(self.statusbar)
-            mouse_over = self.update_statusbar
+            config.mouse_over = self.update_statusbar
             self.statusbar_height = self.statusbar.GetSize()[1]
 
         sizer = wx.BoxSizer(wx.VERTICAL)
-        self.grid = DumpGrid(self, data, dump_params=dump_params,
-                             mouse_over=mouse_over, menu_extra=menu_extra,
-                             row_annotation_size=row_annotation_size)
+        self.grid = DumpGrid(self, data, config=config)
         sizer.Add(self.grid)
         self.SetSizer(sizer)
 
@@ -458,7 +504,7 @@ class DumpFrame(wx.Frame):
 
     def resize(self):
         (width, height) = self.grid.GetBestSize()
-        limit_height = min(height, self.good_height)
+        limit_height = min(height, self.config.frame_max_height)
         self.SetMaxClientSize((width, height))
 
         self.SetClientSize(width, limit_height)
@@ -475,7 +521,7 @@ class DumpFrame(wx.Frame):
         if offset is None:
             self.statusbar.SetStatusText('')
         else:
-            self.statusbar.SetStatusText(self.cellinfo(offset))
+            self.statusbar.SetStatusText(self.config.cellinfo(offset))
 
     def GetDumpData(self):
         return self.data
