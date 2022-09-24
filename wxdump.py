@@ -68,6 +68,9 @@ class WxDumpConfig(object):
     has_width_2 = True
     has_width_4 = True
 
+    # Whether the grid lines should be shown between cells
+    has_grid = False
+
     byte_colour = [0] * 256
     for b in range(256):
         if b < 32 or b == 127:
@@ -311,7 +314,6 @@ class DumpGrid(gridlib.Grid):
 
         cursor_colour = self.table.attributes['cursor'].BackgroundColour
         self.SetCellHighlightColour(cursor_colour)
-        # FIXME: Grid isn't configurable yet.
         grid_colour = self.table.attributes['grid'].BackgroundColour
         self.SetGridLineColour(grid_colour)
 
@@ -322,7 +324,7 @@ class DumpGrid(gridlib.Grid):
         self.EnableEditing(False)
         self.EnableDragRowSize(False)
         self.EnableDragColSize(False)
-        self.EnableGridLines(False)
+        self.EnableGridLines(self.config.has_grid)
         self.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
 
         self.cellsize = (16 * 2, 16)
