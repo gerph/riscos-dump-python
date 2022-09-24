@@ -63,6 +63,11 @@ class WxDumpConfig(object):
     # Status bar enable
     frame_statusbar = False
 
+    # Which of the data width choices are available:
+    has_width_1 = True
+    has_width_2 = True
+    has_width_4 = True
+
     byte_colour = [0] * 256
     for b in range(256):
         if b < 32 or b == 127:
@@ -336,14 +341,23 @@ class DumpGrid(gridlib.Grid):
         # Build up the menu we'll use
         self.menu = wx.Menu()
 
-        self.item_bytes = self.menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
-        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(1), self.item_bytes)
+        if self.config.has_width_1:
+            self.item_bytes = self.menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
+            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(1), self.item_bytes)
+        else:
+            self.item_bytes = None
 
-        self.item_halfwords = self.menu.Append(-1, "Half words", kind=wx.ITEM_CHECK)
-        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(2), self.item_halfwords)
+        if self.config.has_width_2:
+            self.item_halfwords = self.menu.Append(-1, "Half words", kind=wx.ITEM_CHECK)
+            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(2), self.item_halfwords)
+        else:
+            self.item_halfwords = None
 
-        self.item_words = self.menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
-        self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
+        if self.config.has_width_4:
+            self.item_words = self.menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
+            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
+        else:
+            self.item_words = None
 
         self.add_menu_extra(self.menu)
 
@@ -364,9 +378,12 @@ class DumpGrid(gridlib.Grid):
                 self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
 
     def on_popup_menu(self, event):
-        self.item_bytes.Check(self.dump.width == 1)
-        self.item_halfwords.Check(self.dump.width == 2)
-        self.item_words.Check(self.dump.width == 4)
+        if self.item_bytes:
+            self.item_bytes.Check(self.dump.width == 1)
+        if self.item_halfwords:
+            self.item_halfwords.Check(self.dump.width == 2)
+        if self.item_words:
+            self.item_words.Check(self.dump.width == 4)
 
         for extra in self.menu_items:
             if extra[3]:
