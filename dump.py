@@ -296,3 +296,6 @@ class FileDataSource(object):
         data = self.fh.read(size)
         self.offset += len(data)
         return data
+
+    def __bytes__(self):
+        return self[0:len(self)]

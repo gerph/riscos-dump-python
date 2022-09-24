@@ -7,6 +7,8 @@ WxPython classes for dumping hexadecimal information using the Dump object.
 * `DumpFileFrame` - is a subclass of DumpFrame which displays data from a file.
 """
 
+import sys
+
 import wx
 import wx.grid as gridlib
 
@@ -70,6 +72,10 @@ class WxDumpConfig(object):
 
     # Whether the grid lines should be shown between cells
     has_grid = False
+
+    # Whether we show the save data menu option
+    has_save_data = True
+    default_savedata_filename = 'Dump.bin'
 
     byte_colour = [0] * 256
     for b in range(256):
@@ -300,7 +306,6 @@ class DumpGrid(gridlib.Grid):
 
         self.config = config or WxDumpConfig()
         self.parent = parent
-        self.data = data
         self.menu_items = []
         self.dump = dump.DumpBase()
         self.dump.data = data
@@ -309,7 +314,7 @@ class DumpGrid(gridlib.Grid):
                 raise AttributeError("Dump parameter '{}' is not recognised".format(key))
             setattr(self.dump, key, value)
 
-        self.table = DumpTable(self.dump, self.data, self.config)
+        self.table = DumpTable(self.dump, self.dump.data, self.config)
         self.SetTable(self.table, True)
 
         cursor_colour = self.table.attributes['cursor'].BackgroundColour
@@ -363,11 +368,20 @@ class DumpGrid(gridlib.Grid):
 
         self.add_menu_extra(self.menu)
 
+        if self.config.has_save_data:
+            if self.menu.GetMenuItemCount() > 0:
+                self.menu.AppendSeparator()
+            self.item_savedata = self.menu.Append(-1, "Save data...")
+            self.Bind(wx.EVT_MENU, self.on_save_data, self.item_savedata)
+        else:
+            self.item_savedata = None
+
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
 
     def add_menu_extra(self, menu):
         if self.config.menu_extra:
-            menu.AppendSeparator()
+            if self.menu.GetMenuItemCount() > 0:
+                menu.AppendSeparator()
             for item in self.config.menu_extra:
                 name = item[0]
                 func = item[1]
@@ -415,6 +429,40 @@ class DumpGrid(gridlib.Grid):
         self.last_mouse_over = None
         self.config.mouse_over(None)
 
+    def on_save_data(self, event):
+        if self.config.default_savedata_filename.endswith('.bin'):
+            wildcard = "Binary files (*.bin)|*.bin"
+        else:
+            wildcard = "All files|*"
+        with wx.FileDialog(self,
+                           "Save data",
+                           wildcard=wildcard,
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as dialogue:
+            dialogue.SetFilename(self.config.default_savedata_filename)
+            dialogue.SetDirectory('.')
+            if dialogue.ShowModal() == wx.ID_CANCEL:
+                # Screensave was aborted
+                return
+
+            # save the current contents in the file
+            filename = dialogue.GetPath()
+            if isinstance(filename, unicode):
+                filename = filename.encode('utf-8')
+
+            with open(filename, 'wb') as fh:
+                if sys.version_info.major == 3:
+                    data = bytes(self.dump.data)
+                else:
+                    # Python 2 doesn't have the calls to __bytes__ for bytes operations,
+                    # so we must do this ourselves.
+                    data = self.dump.data
+                    if not isinstance(data, bytes):
+                        if getattr(self.dump.data, '__bytes__', None):
+                            data = self.dump.data.__bytes__()
+                        else:
+                            data = data[0:len(data)]
+                fh.write(data)
+
     def GetVisibleRange(self):
         # Get the position of the visible cells
         ux, uy = self.GetScrollPixelsPerUnit()
@@ -439,7 +487,7 @@ class DumpGrid(gridlib.Grid):
         self.dump.columns = int(self.dump.width * self.dump.columns / width)
         self.dump.width = width
 
-        self.table = DumpTable(self.dump, self.data, config=self.config)
+        self.table = DumpTable(self.dump, self.dump.data, config=self.config)
         self.SetTable(self.table, True)
         self.resize()
         self.parent.resize()
@@ -447,7 +495,7 @@ class DumpGrid(gridlib.Grid):
     def SetDumpColumns(self, columns):
         self.dump.columns = columns
 
-        self.table = DumpTable(self.dump, self.data, config=self.config)
+        self.table = DumpTable(self.dump, self.dump.data, config=self.config)
         self.SetTable(self.table, True)
         self.resize()
         self.parent.resize()
@@ -557,6 +605,7 @@ class DumpFrame(wx.Frame):
             self.statusbar.SetStatusText(self.config.cellinfo(offset))
 
     def GetDumpData(self):
+        # FIXME: Might be wrong if we refreshed? Read from the grid?
         return self.data
 
 
