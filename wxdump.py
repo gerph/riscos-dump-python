@@ -299,6 +299,59 @@ class DumpStatusBar(wx.StatusBar):
         # Nothing special to do here?
 
 
+class DumpCellRenderer(wx.grid.GridCellStringRenderer):
+    """
+    Custom cell renderer for drawing the text cells in different colours.
+
+    If the 'text' in the cell has been returned as a sequence of pairs of (colour, text)
+    then we'll render the strings in that format. This is intended to be used to draw
+    text or attribution cells with colouring.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(DumpCellRenderer, self).__init__(*args, **kwargs)
+        self.cached_colours = {}
+
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        text = grid.GetCellValue(row, col)
+        if not isinstance(text, (tuple, list)):
+            super(DumpCellRenderer, self).Draw(grid, attr, dc, rect, row, col, isSelected)
+        else:
+            (hAlign, vAlign) = attr.GetAlignment()
+
+            if isSelected:
+                bg = grid.GetSelectionBackground()
+                fg = grid.GetSelectionForeground()
+            else:
+                bg = attr.BackgroundColour
+                fg = attr.TextColour
+
+            dc.SetBrush(wx.Brush(bg, wx.SOLID))
+            dc.SetPen(wx.Pen(bg))
+            dc.DrawRectangle(rect)
+
+            dc.SetTextBackground(attr.BackgroundColour)
+            dc.SetFont(attr.GetFont())
+
+            for part in text:
+                if isinstance(part, str):
+                    dc.SetTextForeground(attr.TextColour)
+                    textpart = part
+                else:
+                    colname = part[0]
+                    textpart = part[1]
+                    col = self.cached_colours.get(colname, None)
+                    if not col:
+                        col = wx.Colour(colname)
+                        self.cached_colours[colname] = col
+                    dc.SetTextForeground(col)
+
+                grid.DrawTextRectangle(dc, textpart, rect, hAlign, vAlign)
+                (w, h) = dc.GetTextExtent(textpart)
+                rect.x += w
+                rect.width -= w
+
+
 class DumpGrid(gridlib.Grid):
 
     def __init__(self, parent, data, config=None):
@@ -307,12 +360,16 @@ class DumpGrid(gridlib.Grid):
         self.config = config or WxDumpConfig()
         self.parent = parent
         self.menu_items = []
+
         self.dump = dump.DumpBase()
         self.dump.data = data
         for key, value in self.config.dump_params.items():
             if getattr(self.dump, key, Ellipsis) is Ellipsis:
                 raise AttributeError("Dump parameter '{}' is not recognised".format(key))
             setattr(self.dump, key, value)
+
+        self.text_column = self.dump.columns
+        self.annotation_column = self.dump.columns + 1
 
         self.table = DumpTable(self.dump, self.dump.data, self.config)
         self.SetTable(self.table, True)
@@ -331,6 +388,8 @@ class DumpGrid(gridlib.Grid):
         self.EnableDragColSize(False)
         self.EnableGridLines(self.config.has_grid)
         self.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
+
+        self.SetDefaultRenderer(DumpCellRenderer())
 
         self.cellsize = (16 * 2, 16)
         self.labelsize = (16 * 8, 16)
@@ -501,6 +560,9 @@ class DumpGrid(gridlib.Grid):
         self.parent.resize()
 
     def resize(self):
+        self.text_column = self.dump.columns
+        self.annotation_column = self.dump.columns + 1
+
         self.BeginBatch()
 
         dc = wx.ScreenDC()
