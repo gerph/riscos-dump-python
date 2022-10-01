@@ -437,6 +437,32 @@ class DumpGrid(gridlib.Grid):
 
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
 
+    def GotoAddress(self, address):
+        """
+        Go to a specific address.
+
+        @param address: Address to go to
+
+        @return:    True if address is valid, False if outside our range
+        """
+        (row, col) = self.dump.address_to_coords(address)
+        if row is None:
+            return False
+
+        self.GoToCell(row, col)
+        return True
+
+    def GetAddress(self):
+        """
+        Read the current cursor position.
+
+        @return: Current address
+        """
+        col = self.GetGridCursorCol()
+        row = self.GetGridCursorRow()
+        address = self.dump.coords_to_address(col, row, bound=True)
+        return address
+
     def add_menu_extra(self, menu):
         if self.config.menu_extra:
             if self.menu.GetMenuItemCount() > 0:

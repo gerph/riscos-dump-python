@@ -83,6 +83,55 @@ class DumpBase(object):
         """
         return int(offset / (self.columns * self.width))
 
+    def address_to_coords(self, address):
+        """
+        Convert from a data address to a coordinate pair.
+
+        @param address: address to find
+
+        @return:        tuple of (row, column) or (None, None) if outside range
+        """
+        offset = address - self.address_base
+        rowsize = self.columns * self.width
+        if offset < 0 or offset > len(self.data):
+            return (None, None)
+        return (int(offset / rowsize), offset % rowsize)
+
+    def coords_to_address(self, row, col, bound=False):
+        """
+        Convert from a coordinate pair to a data address.
+
+        @param row:     Row
+        @param col:     Column
+        @param bound:   True to bound to the limits, False to return None if invalid
+
+        @return:        address, or None if invalid
+        """
+        if col > self.columns:
+            if bound:
+                col = self.columns - 1
+            else:
+                return None
+        if col < 0:
+            if bound:
+                col = 0
+            else:
+                return None
+        if row < 0:
+            if bound:
+                row = 0
+            else:
+                return None
+
+        offset = (row * self.columns * self.width) + (col * self.width)
+        if offset > len(self.data):
+            if bound:
+                offset = max(len(self.data) - 1, 0)
+            else:
+                return None
+
+        return offset + self.address_base
+
     def rows(self):
         """
         Return the number of rows present.
