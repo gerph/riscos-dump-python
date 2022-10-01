@@ -403,6 +403,7 @@ class DumpGrid(gridlib.Grid):
         self.grid_window = self.GetGridWindow()
         self.grid_window.Bind(wx.EVT_MOTION, self.on_mouse_over)
         self.grid_window.Bind(wx.EVT_LEAVE_WINDOW, self.on_mouse_out)
+        self.Bind(wx.grid.EVT_GRID_SELECT_CELL, self.on_select_cell)
 
         # Build up the menu we'll use
         self.menu = wx.Menu()
@@ -477,6 +478,15 @@ class DumpGrid(gridlib.Grid):
                 menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if not checked else wx.ITEM_CHECK)
                 self.menu_items.append((menuitem, name, func, checked))
                 self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
+
+    def on_select_cell(self, event):
+        row = event.Row
+        col = event.Col
+        if col >= self.dump.columns:
+            col = self.dump.columns - 1
+            # Reject selecting the text/annotations, and instead go to the end most data cell in that row
+            event.Veto()
+            self.GoToCell(row, col)
 
     def on_popup_menu(self, event):
         if self.item_bytes:
