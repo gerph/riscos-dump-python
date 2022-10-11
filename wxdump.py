@@ -73,6 +73,9 @@ class WxDumpConfig(object):
     has_width_2 = True
     has_width_4 = True
 
+    # Which of the menu operations are available:
+    has_goto_address = True
+
     # Whether the grid lines should be shown between cells
     has_grid = False
 
@@ -487,9 +490,18 @@ class DumpGrid(gridlib.Grid):
                 self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
 
     def add_menu_extra(self, menu):
-        if self.config.menu_extra:
+        if self.config.has_goto_address or self.config.menu_extra:
             if self.menu.GetMenuItemCount() > 0:
                 menu.AppendSeparator()
+
+        if self.config.has_goto_address:
+            name = "Goto address..."
+            func = self.on_goto_address
+            menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL)
+            self.menu_items.append((menuitem, name, func, None))
+            self.Bind(wx.EVT_MENU, func, menuitem)
+
+        if self.config.menu_extra:
             for item in self.config.menu_extra:
                 name = item[0]
                 func = item[1]
@@ -545,6 +557,32 @@ class DumpGrid(gridlib.Grid):
     def on_mouse_out(self, event):
         self.last_mouse_over = None
         self.config.mouse_over(None)
+
+    def on_goto_address(self, event):
+        start = self.dump.address_base
+        end = self.dump.address_base + len(self.dump.data)
+        address = self.GetAddress()
+
+        address_str = wx.GetTextFromUser("Address to go to (&{:X} - &{:X}):".format(start, end),
+                                         caption="Goto address",
+                                         default_value="&{:X}".format(address),
+                                         parent=self, centre=True)
+
+        if not address_str:
+            # If they didn't give anything, just ignore as if they cancelled it.
+            return
+
+        if address_str[0] == '&':
+            address_str = address_str[1:]
+        if address_str[0:1] == '0x':
+            address_str = address_str[1:]
+
+        try:
+            address = int(address_str, 16)
+            self.GotoAddress(address)
+        except ValueError:
+            # FIXME: Make this report an error?
+            pass
 
     def on_save_data(self, event):
         if self.config.default_savedata_filename.endswith('.bin'):
