@@ -415,6 +415,8 @@ class DumpGrid(gridlib.Grid):
         # Build up the menu we'll use
         self.menu = wx.Menu()
 
+        self.last_find_string = ''
+
         self.add_menu_format(self.menu)
         self.add_menu_extra(self.menu)
 
@@ -620,12 +622,14 @@ class DumpGrid(gridlib.Grid):
     def on_find_string(self, event):
         find_str = wx.GetTextFromUser("Find string (case-sensitive):",
                                       caption="Find string",
-                                      default_value="",
+                                      default_value=self.last_find_string,
                                       parent=self, centre=True)
 
         if not find_str:
             # If they didn't give anything, just ignore as if they cancelled it.
             return
+
+        self.last_find_string = find_str
 
         # FIXME: Should this be UTF-8 encoded? or should we provide a conversion function?
         self.FindString(find_str.encode('utf-8'))
