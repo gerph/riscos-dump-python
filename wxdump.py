@@ -429,6 +429,7 @@ class DumpGrid(gridlib.Grid):
             self.item_savedata = None
 
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
+        self.Bind(wx.EVT_KEY_DOWN, self.on_key)
 
     def FindString(self, s):
         """
@@ -523,14 +524,14 @@ class DumpGrid(gridlib.Grid):
                 menu.AppendSeparator()
 
         if self.config.has_goto_address:
-            name = "Goto address..."
+            name = "Goto address...\tctrl+L"
             func = self.on_goto_address
             menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL)
             self.menu_items.append((menuitem, name, func, False))
             self.Bind(wx.EVT_MENU, func, menuitem)
 
         if self.config.has_find_string:
-            name = "Find string..."
+            name = "Find string...\tctrl+F"
             func = self.on_find_string
             menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL)
             self.menu_items.append((menuitem, name, func, False))
@@ -547,6 +548,15 @@ class DumpGrid(gridlib.Grid):
                 menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if not checked else wx.ITEM_CHECK)
                 self.menu_items.append((menuitem, name, func, checked))
                 self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
+
+    def on_key(self, event):
+        if self.config.has_find_string:
+            if event.ControlDown() and event.GetKeyCode() == ord('F'):
+                self.on_find_string(event)
+        if self.config.has_goto_address:
+            if event.ControlDown() and event.GetKeyCode() == ord('L'):
+                self.on_goto_address(event)
+        event.Skip()
 
     def on_select_cell(self, event):
         row = event.Row
