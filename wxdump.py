@@ -313,7 +313,7 @@ class DumpCellRenderer(wx.grid.GridCellStringRenderer):
         self.cached_colours = {}
 
     def Draw(self, grid, attr, dc, rect, row, col, isSelected):
-        text = grid.GetCellValue(row, col)
+        text = grid.table.GetValue(row, col)
         if not isinstance(text, (tuple, list)):
             super(DumpCellRenderer, self).Draw(grid, attr, dc, rect, row, col, isSelected)
         else:
@@ -334,7 +334,7 @@ class DumpCellRenderer(wx.grid.GridCellStringRenderer):
             dc.SetFont(attr.GetFont())
 
             for part in text:
-                if isinstance(part, str):
+                if isinstance(part, (str, unicode)):
                     dc.SetTextForeground(attr.TextColour)
                     textpart = part
                 else:
