@@ -83,6 +83,55 @@ class DumpBase(object):
         """
         return int(offset / (self.columns * self.width))
 
+    def address_to_coords(self, address):
+        """
+        Convert from a data address to a coordinate pair.
+
+        @param address: address to find
+
+        @return:        tuple of (row, column) or (None, None) if outside range
+        """
+        offset = address - self.address_base
+        rowsize = self.columns * self.width
+        if offset < 0 or offset > len(self.data):
+            return (None, None)
+        return (int(offset / rowsize), offset % rowsize)
+
+    def coords_to_address(self, row, col, bound=False):
+        """
+        Convert from a coordinate pair to a data address.
+
+        @param row:     Row
+        @param col:     Column
+        @param bound:   True to bound to the limits, False to return None if invalid
+
+        @return:        address, or None if invalid
+        """
+        if col > self.columns:
+            if bound:
+                col = self.columns - 1
+            else:
+                return None
+        if col < 0:
+            if bound:
+                col = 0
+            else:
+                return None
+        if row < 0:
+            if bound:
+                row = 0
+            else:
+                return None
+
+        offset = (row * self.columns * self.width) + (col * self.width)
+        if offset > len(self.data):
+            if bound:
+                offset = max(len(self.data) - 1, 0)
+            else:
+                return None
+
+        return offset + self.address_base
+
     def rows(self):
         """
         Return the number of rows present.
@@ -262,6 +311,7 @@ class Dump(DumpBase):
 
 
 class FileDataSource(object):
+    search_chunk_size = 1024
 
     def __init__(self, fh):
         self.fh = fh
@@ -299,3 +349,36 @@ class FileDataSource(object):
 
     def __bytes__(self):
         return self[0:len(self)]
+
+    def find(self, s, start=0):
+        """
+        From a specific point in the file, find a byte string.
+
+        @param s:       Byte string to look for
+        @param start:   Offset in the file to search from
+
+        @return:    -1 if not found, or index from the base offset if found
+        """
+
+        search_size = max(len(s) + self.search_chunk_size, self.search_chunk_size * 2)
+        skip_size = search_size - len(s)
+
+        # We search in chunks within the file, trying to find the string in each chunk.
+        # If we don't find the string, we move through the file keeping the window so
+        # that we can get the entries without holding the whole file in memory at once.
+        self.fh.seek(start + self.base_offset, io.SEEK_SET)
+        datastart = start
+        data = b''
+        while True:
+            newdata = self.fh.read(search_size)
+            if not newdata:
+                # There was no more data, and we're at the end of the file, so we didn't find it.
+                return -1
+            data += newdata
+            index = data.find(s)
+            if index != -1:
+                # We found it! So we can return the offset
+                return datastart + index
+            # Not found, so we need to accumulate more
+            data = data[skip_size:]
+            datastart += skip_size

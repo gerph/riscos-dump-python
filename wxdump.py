@@ -48,12 +48,15 @@ class WxDumpConfig(object):
     # Number of characters in the row annotations
     row_annotation_size = 24
 
-    # Extra menu entries as a list of tuples:
+    # Menu entries as a list of tuples:
     #   (menu item title, function to call, selection state)
     #   selection state: False for non-check function
     #                    True for selected item
     #   function has the args (grid, dump, chosen)
     #   chosen is the selection state when selected, or None to read state
+    # `menu_format` - adds entries that change the format of the display (eg 'show disassembly')
+    # `menu_extra` - adds entries that operate on the display
+    menu_format = []
     menu_extra = []
 
     # How many rows we will cache at a time
@@ -69,6 +72,10 @@ class WxDumpConfig(object):
     has_width_1 = True
     has_width_2 = True
     has_width_4 = True
+
+    # Which of the menu operations are available:
+    has_goto_address = True
+    has_find_string = True
 
     # Whether the grid lines should be shown between cells
     has_grid = False
@@ -299,6 +306,59 @@ class DumpStatusBar(wx.StatusBar):
         # Nothing special to do here?
 
 
+class DumpCellRenderer(wx.grid.GridCellStringRenderer):
+    """
+    Custom cell renderer for drawing the text cells in different colours.
+
+    If the 'text' in the cell has been returned as a sequence of pairs of (colour, text)
+    then we'll render the strings in that format. This is intended to be used to draw
+    text or attribution cells with colouring.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(DumpCellRenderer, self).__init__(*args, **kwargs)
+        self.cached_colours = {}
+
+    def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+        text = grid.table.GetValue(row, col)
+        if not isinstance(text, (tuple, list)):
+            super(DumpCellRenderer, self).Draw(grid, attr, dc, rect, row, col, isSelected)
+        else:
+            (hAlign, vAlign) = attr.GetAlignment()
+
+            if isSelected:
+                bg = grid.GetSelectionBackground()
+                fg = grid.GetSelectionForeground()
+            else:
+                bg = attr.BackgroundColour
+                fg = attr.TextColour
+
+            dc.SetBrush(wx.Brush(bg, wx.SOLID))
+            dc.SetPen(wx.Pen(bg))
+            dc.DrawRectangle(rect)
+
+            dc.SetTextBackground(attr.BackgroundColour)
+            dc.SetFont(attr.GetFont())
+
+            for part in text:
+                if isinstance(part, (str, unicode)):
+                    dc.SetTextForeground(attr.TextColour)
+                    textpart = part
+                else:
+                    colname = part[0]
+                    textpart = part[1]
+                    col = self.cached_colours.get(colname, None)
+                    if not col:
+                        col = wx.Colour(colname)
+                        self.cached_colours[colname] = col
+                    dc.SetTextForeground(col)
+
+                grid.DrawTextRectangle(dc, textpart, rect, hAlign, vAlign)
+                (w, h) = dc.GetTextExtent(textpart)
+                rect.x += w
+                rect.width -= w
+
+
 class DumpGrid(gridlib.Grid):
 
     def __init__(self, parent, data, config=None):
@@ -307,12 +367,16 @@ class DumpGrid(gridlib.Grid):
         self.config = config or WxDumpConfig()
         self.parent = parent
         self.menu_items = []
+
         self.dump = dump.DumpBase()
         self.dump.data = data
         for key, value in self.config.dump_params.items():
             if getattr(self.dump, key, Ellipsis) is Ellipsis:
                 raise AttributeError("Dump parameter '{}' is not recognised".format(key))
             setattr(self.dump, key, value)
+
+        self.text_column = self.dump.columns
+        self.annotation_column = self.dump.columns + 1
 
         self.table = DumpTable(self.dump, self.dump.data, self.config)
         self.SetTable(self.table, True)
@@ -332,6 +396,8 @@ class DumpGrid(gridlib.Grid):
         self.EnableGridLines(self.config.has_grid)
         self.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
 
+        self.SetDefaultRenderer(DumpCellRenderer())
+
         self.cellsize = (16 * 2, 16)
         self.labelsize = (16 * 8, 16)
         self.textsize = (16 * 16, 16)
@@ -344,28 +410,14 @@ class DumpGrid(gridlib.Grid):
         self.grid_window = self.GetGridWindow()
         self.grid_window.Bind(wx.EVT_MOTION, self.on_mouse_over)
         self.grid_window.Bind(wx.EVT_LEAVE_WINDOW, self.on_mouse_out)
+        self.Bind(wx.grid.EVT_GRID_SELECT_CELL, self.on_select_cell)
 
         # Build up the menu we'll use
         self.menu = wx.Menu()
 
-        if self.config.has_width_1:
-            self.item_bytes = self.menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
-            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(1), self.item_bytes)
-        else:
-            self.item_bytes = None
+        self.last_find_string = ''
 
-        if self.config.has_width_2:
-            self.item_halfwords = self.menu.Append(-1, "Half words", kind=wx.ITEM_CHECK)
-            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(2), self.item_halfwords)
-        else:
-            self.item_halfwords = None
-
-        if self.config.has_width_4:
-            self.item_words = self.menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
-            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
-        else:
-            self.item_words = None
-
+        self.add_menu_format(self.menu)
         self.add_menu_extra(self.menu)
 
         if self.config.has_save_data:
@@ -377,11 +429,115 @@ class DumpGrid(gridlib.Grid):
             self.item_savedata = None
 
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
+        self.Bind(wx.EVT_KEY_DOWN, self.on_key)
 
-    def add_menu_extra(self, menu):
-        if self.config.menu_extra:
+    def FindString(self, s):
+        """
+        Find a string in the data and go to it.
+
+        @param s: String to look for
+
+        @return:    True if address is valid, False if outside our range
+        """
+        cursor = self.GetAddress() - self.dump.address_base
+        index = self.dump.data.find(s, cursor + 1)
+        if index == -1:
+            # not found after the current cursor, so look from the start
+            index = self.dump.data.find(s)
+            if index == -1:
+                # Not found at the start either
+                return False
+
+        address = self.dump.address_base + index
+        (row, col) = self.dump.address_to_coords(address)
+        if row is None:
+            return False
+
+        self.GoToCell(row, col)
+        return True
+
+    def GotoAddress(self, address):
+        """
+        Go to a specific address.
+
+        @param address: Address to go to
+
+        @return:    True if address is valid, False if outside our range
+        """
+        (row, col) = self.dump.address_to_coords(address)
+        if row is None:
+            return False
+
+        self.GoToCell(row, col)
+        return True
+
+    def GetAddress(self):
+        """
+        Read the current cursor position.
+
+        @return: Current address
+        """
+        col = self.GetGridCursorCol()
+        row = self.GetGridCursorRow()
+        address = self.dump.coords_to_address(row, col, bound=True)
+        return address
+
+    def add_menu_format(self, menu):
+        """
+        Add the items that change the format of the dump display.
+        """
+        if self.config.has_width_1:
+            self.item_bytes = menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
+            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(1), self.item_bytes)
+        else:
+            self.item_bytes = None
+
+        if self.config.has_width_2:
+            self.item_halfwords = menu.Append(-1, "Half words", kind=wx.ITEM_CHECK)
+            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(2), self.item_halfwords)
+        else:
+            self.item_halfwords = None
+
+        if self.config.has_width_4:
+            self.item_words = menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
+            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
+        else:
+            self.item_words = None
+
+        if self.config.menu_format:
             if self.menu.GetMenuItemCount() > 0:
                 menu.AppendSeparator()
+            for item in self.config.menu_format:
+                name = item[0]
+                func = item[1]
+                if len(item) > 2:
+                    checked = item[2]
+                else:
+                    checked = False
+                menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if not checked else wx.ITEM_CHECK)
+                self.menu_items.append((menuitem, name, func, checked))
+                self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
+
+    def add_menu_extra(self, menu):
+        if self.config.has_goto_address or self.config.has_find_string or self.config.menu_extra:
+            if self.menu.GetMenuItemCount() > 0:
+                menu.AppendSeparator()
+
+        if self.config.has_goto_address:
+            name = "Goto address...\tctrl+L"
+            func = self.on_goto_address
+            menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL)
+            self.menu_items.append((menuitem, name, func, False))
+            self.Bind(wx.EVT_MENU, func, menuitem)
+
+        if self.config.has_find_string:
+            name = "Find string...\tctrl+F"
+            func = self.on_find_string
+            menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL)
+            self.menu_items.append((menuitem, name, func, False))
+            self.Bind(wx.EVT_MENU, func, menuitem)
+
+        if self.config.menu_extra:
             for item in self.config.menu_extra:
                 name = item[0]
                 func = item[1]
@@ -392,6 +548,24 @@ class DumpGrid(gridlib.Grid):
                 menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if not checked else wx.ITEM_CHECK)
                 self.menu_items.append((menuitem, name, func, checked))
                 self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
+
+    def on_key(self, event):
+        if self.config.has_find_string:
+            if event.ControlDown() and event.GetKeyCode() == ord('F'):
+                self.on_find_string(event)
+        if self.config.has_goto_address:
+            if event.ControlDown() and event.GetKeyCode() == ord('L'):
+                self.on_goto_address(event)
+        event.Skip()
+
+    def on_select_cell(self, event):
+        row = event.Row
+        col = event.Col
+        if col >= self.dump.columns:
+            col = self.dump.columns - 1
+            # Reject selecting the text/annotations, and instead go to the end most data cell in that row
+            event.Veto()
+            self.GoToCell(row, col)
 
     def on_popup_menu(self, event):
         if self.item_bytes:
@@ -428,6 +602,47 @@ class DumpGrid(gridlib.Grid):
     def on_mouse_out(self, event):
         self.last_mouse_over = None
         self.config.mouse_over(None)
+
+    def on_goto_address(self, event):
+        start = self.dump.address_base
+        end = self.dump.address_base + len(self.dump.data)
+        address = self.GetAddress()
+
+        address_str = wx.GetTextFromUser("Address to go to (&{:X} - &{:X}):".format(start, end),
+                                         caption="Goto address",
+                                         default_value="&{:X}".format(address),
+                                         parent=self, centre=True)
+
+        if not address_str:
+            # If they didn't give anything, just ignore as if they cancelled it.
+            return
+
+        if address_str[0] == '&':
+            address_str = address_str[1:]
+        if address_str[0:1] == '0x':
+            address_str = address_str[1:]
+
+        try:
+            address = int(address_str, 16)
+            self.GotoAddress(address)
+        except ValueError:
+            # FIXME: Make this report an error?
+            pass
+
+    def on_find_string(self, event):
+        find_str = wx.GetTextFromUser("Find string (case-sensitive):",
+                                      caption="Find string",
+                                      default_value=self.last_find_string,
+                                      parent=self, centre=True)
+
+        if not find_str:
+            # If they didn't give anything, just ignore as if they cancelled it.
+            return
+
+        self.last_find_string = find_str
+
+        # FIXME: Should this be UTF-8 encoded? or should we provide a conversion function?
+        self.FindString(find_str.encode('utf-8'))
 
     def on_save_data(self, event):
         if self.config.default_savedata_filename.endswith('.bin'):
@@ -501,6 +716,9 @@ class DumpGrid(gridlib.Grid):
         self.parent.resize()
 
     def resize(self):
+        self.text_column = self.dump.columns
+        self.annotation_column = self.dump.columns + 1
+
         self.BeginBatch()
 
         dc = wx.ScreenDC()
