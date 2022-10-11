@@ -311,6 +311,7 @@ class Dump(DumpBase):
 
 
 class FileDataSource(object):
+    search_chunk_size = 1024
 
     def __init__(self, fh):
         self.fh = fh
@@ -348,3 +349,36 @@ class FileDataSource(object):
 
     def __bytes__(self):
         return self[0:len(self)]
+
+    def find(self, s, start=0):
+        """
+        From a specific point in the file, find a byte string.
+
+        @param s:       Byte string to look for
+        @param start:   Offset in the file to search from
+
+        @return:    -1 if not found, or index from the base offset if found
+        """
+
+        search_size = max(len(s) + self.search_chunk_size, self.search_chunk_size * 2)
+        skip_size = search_size - len(s)
+
+        # We search in chunks within the file, trying to find the string in each chunk.
+        # If we don't find the string, we move through the file keeping the window so
+        # that we can get the entries without holding the whole file in memory at once.
+        self.fh.seek(start + self.base_offset, io.SEEK_SET)
+        datastart = start
+        data = b''
+        while True:
+            newdata = self.fh.read(search_size)
+            if not newdata:
+                # There was no more data, and we're at the end of the file, so we didn't find it.
+                return -1
+            data += newdata
+            index = data.find(s)
+            if index != -1:
+                # We found it! So we can return the offset
+                return datastart + index
+            # Not found, so we need to accumulate more
+            data = data[skip_size:]
+            datastart += skip_size
