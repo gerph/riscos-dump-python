@@ -48,12 +48,15 @@ class WxDumpConfig(object):
     # Number of characters in the row annotations
     row_annotation_size = 24
 
-    # Extra menu entries as a list of tuples:
+    # Menu entries as a list of tuples:
     #   (menu item title, function to call, selection state)
     #   selection state: False for non-check function
     #                    True for selected item
     #   function has the args (grid, dump, chosen)
     #   chosen is the selection state when selected, or None to read state
+    # `menu_format` - adds entries that change the format of the display (eg 'show disassembly')
+    # `menu_extra` - adds entries that operate on the display
+    menu_format = []
     menu_extra = []
 
     # How many rows we will cache at a time
@@ -408,24 +411,7 @@ class DumpGrid(gridlib.Grid):
         # Build up the menu we'll use
         self.menu = wx.Menu()
 
-        if self.config.has_width_1:
-            self.item_bytes = self.menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
-            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(1), self.item_bytes)
-        else:
-            self.item_bytes = None
-
-        if self.config.has_width_2:
-            self.item_halfwords = self.menu.Append(-1, "Half words", kind=wx.ITEM_CHECK)
-            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(2), self.item_halfwords)
-        else:
-            self.item_halfwords = None
-
-        if self.config.has_width_4:
-            self.item_words = self.menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
-            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
-        else:
-            self.item_words = None
-
+        self.add_menu_format(self.menu)
         self.add_menu_extra(self.menu)
 
         if self.config.has_save_data:
@@ -463,6 +449,42 @@ class DumpGrid(gridlib.Grid):
         row = self.GetGridCursorRow()
         address = self.dump.coords_to_address(col, row, bound=True)
         return address
+
+    def add_menu_format(self, menu):
+        """
+        Add the items that change the format of the dump display.
+        """
+        if self.config.has_width_1:
+            self.item_bytes = menu.Append(-1, "Bytes", kind=wx.ITEM_CHECK)
+            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(1), self.item_bytes)
+        else:
+            self.item_bytes = None
+
+        if self.config.has_width_2:
+            self.item_halfwords = menu.Append(-1, "Half words", kind=wx.ITEM_CHECK)
+            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(2), self.item_halfwords)
+        else:
+            self.item_halfwords = None
+
+        if self.config.has_width_4:
+            self.item_words = menu.Append(-1, "Words", kind=wx.ITEM_CHECK)
+            self.Bind(wx.EVT_MENU, lambda event: self.SetDumpWidth(4), self.item_words)
+        else:
+            self.item_words = None
+
+        if self.config.menu_format:
+            if self.menu.GetMenuItemCount() > 0:
+                menu.AppendSeparator()
+            for item in self.config.menu_format:
+                name = item[0]
+                func = item[1]
+                if len(item) > 2:
+                    checked = item[2]
+                else:
+                    checked = False
+                menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL if not checked else wx.ITEM_CHECK)
+                self.menu_items.append((menuitem, name, func, checked))
+                self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
 
     def add_menu_extra(self, menu):
         if self.config.menu_extra:
