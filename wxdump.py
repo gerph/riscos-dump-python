@@ -75,6 +75,7 @@ class WxDumpConfig(object):
 
     # Which of the menu operations are available:
     has_goto_address = True
+    has_find_string = True
 
     # Whether the grid lines should be shown between cells
     has_grid = False
@@ -427,6 +428,31 @@ class DumpGrid(gridlib.Grid):
 
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK, self.on_popup_menu)
 
+    def FindString(self, s):
+        """
+        Find a string in the data and go to it.
+
+        @param s: String to look for
+
+        @return:    True if address is valid, False if outside our range
+        """
+        cursor = self.GetAddress() - self.dump.address_base
+        index = self.dump.data.find(s, cursor + 1)
+        if index == -1:
+            # not found after the current cursor, so look from the start
+            index = self.dump.data.find(s)
+            if index == -1:
+                # Not found at the start either
+                return False
+
+        address = self.dump.address_base + index
+        (row, col) = self.dump.address_to_coords(address)
+        if row is None:
+            return False
+
+        self.GoToCell(row, col)
+        return True
+
     def GotoAddress(self, address):
         """
         Go to a specific address.
@@ -450,7 +476,7 @@ class DumpGrid(gridlib.Grid):
         """
         col = self.GetGridCursorCol()
         row = self.GetGridCursorRow()
-        address = self.dump.coords_to_address(col, row, bound=True)
+        address = self.dump.coords_to_address(row, col, bound=True)
         return address
 
     def add_menu_format(self, menu):
@@ -490,7 +516,7 @@ class DumpGrid(gridlib.Grid):
                 self.Bind(wx.EVT_MENU, lambda event, func=func: func(self, self.dump, chosen=True), menuitem)
 
     def add_menu_extra(self, menu):
-        if self.config.has_goto_address or self.config.menu_extra:
+        if self.config.has_goto_address or self.config.has_find_string or self.config.menu_extra:
             if self.menu.GetMenuItemCount() > 0:
                 menu.AppendSeparator()
 
@@ -498,7 +524,14 @@ class DumpGrid(gridlib.Grid):
             name = "Goto address..."
             func = self.on_goto_address
             menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL)
-            self.menu_items.append((menuitem, name, func, None))
+            self.menu_items.append((menuitem, name, func, False))
+            self.Bind(wx.EVT_MENU, func, menuitem)
+
+        if self.config.has_find_string:
+            name = "Find string..."
+            func = self.on_find_string
+            menuitem = self.menu.Append(-1, name, kind=wx.ITEM_NORMAL)
+            self.menu_items.append((menuitem, name, func, False))
             self.Bind(wx.EVT_MENU, func, menuitem)
 
         if self.config.menu_extra:
@@ -583,6 +616,19 @@ class DumpGrid(gridlib.Grid):
         except ValueError:
             # FIXME: Make this report an error?
             pass
+
+    def on_find_string(self, event):
+        find_str = wx.GetTextFromUser("Find string (case-sensitive):",
+                                      caption="Find string",
+                                      default_value="",
+                                      parent=self, centre=True)
+
+        if not find_str:
+            # If they didn't give anything, just ignore as if they cancelled it.
+            return
+
+        # FIXME: Should this be UTF-8 encoded? or should we provide a conversion function?
+        self.FindString(find_str.encode('utf-8'))
 
     def on_save_data(self, event):
         if self.config.default_savedata_filename.endswith('.bin'):
