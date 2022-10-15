@@ -298,6 +298,10 @@ class DumpTable(gridlib.GridTableBase):
 
         return self.row_cache[row]
 
+    def SetData(self, data):
+        self.dump.data = data
+        self.row_cache = {}
+
 
 class DumpStatusBar(wx.StatusBar):
 
@@ -715,6 +719,10 @@ class DumpGrid(gridlib.Grid):
         self.resize()
         self.parent.resize()
 
+    def SetData(self, data):
+        self.table.SetData(data)
+        self.ForceRefresh()
+
     def resize(self):
         self.text_column = self.dump.columns
         self.annotation_column = self.dump.columns + 1
@@ -768,6 +776,10 @@ class DumpGrid(gridlib.Grid):
         rect = self.CellToRect(self.table.GetNumberRows() - 1, self.table.GetNumberCols() - 1)
         cells_width = rect.Right + self.labelsize[0]
         cells_height = rect.Bottom + int(self.cellsize[1] * 1.5) + 1
+
+        # Don't allow the window to have a very small minimum size
+        cells_height = max(cells_height, 32 + self.labelsize[1] + self.textsize[1] * 2)
+        cells_width = max(cells_width, 32 + self.labelsize[0] + self.textsize[0])
         return wx.Size(cells_width,
                        cells_height)
 
@@ -787,7 +799,6 @@ class DumpFrame(wx.Frame):
 
         self.statusbar = None
         self.statusbar_height = 0
-        mouse_over = None
         if self.config.frame_statusbar:
             self.statusbar = DumpStatusBar(self)
             self.SetStatusBar(self.statusbar)
@@ -802,14 +813,14 @@ class DumpFrame(wx.Frame):
         self.resize()
 
     def resize(self):
-        (width, height) = self.grid.GetBestSize()
-        limit_height = min(height, self.config.frame_max_height)
-        self.SetMaxClientSize((width, height))
+        (best_width, best_height) = self.grid.GetBestSize()
+        limit_height = min(best_height, self.config.frame_max_height)
+        self.SetMaxClientSize((best_width, best_height))
 
-        self.SetClientSize(width, limit_height)
+        self.SetClientSize(best_width, limit_height)
 
-        (width, height) = self.grid.GetMinSize()
-        self.SetMinClientSize(wx.Size(width, height + self.statusbar_height))
+        (min_width, min_height) = self.grid.GetMinSize()
+        self.SetMinClientSize(wx.Size(min_width, min_height + self.statusbar_height))
 
     def update_statusbar(self, offset):
         """
