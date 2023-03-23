@@ -285,7 +285,7 @@ class DumpTable(gridlib.GridTableBase):
                         rowvalues = list(rowvalues)
                     rowvalues += [None] * (self.dump.columns - len(rowvalues))
 
-                rowbytevalues = [ord(c) for c in rowdata]
+                rowbytevalues = [c for c in rowdata]
                 rowtext = self.dump.format_chars(rowbytevalues)
                 rowannotation = self.dump.format_annotation(row)
 

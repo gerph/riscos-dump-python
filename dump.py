@@ -166,7 +166,7 @@ class DumpBase(object):
         """
         start = self.row_to_offset(row)
         end = self.row_to_offset(row + 1)
-        return self.data[start:end]
+        return bytearray(self.data[start:end])
 
     def row_values(self, row):
         """
@@ -175,7 +175,7 @@ class DumpBase(object):
         rowdata = self.row_data(row)
 
         if self.width == 1:
-            return [ord(b) for b in rowdata]
+            return [b for b in rowdata]
 
         if len(rowdata) % self.width != 0:
             rowdata += '\x00' * (self.width - (len(rowdata) % self.width))
@@ -189,7 +189,7 @@ class DumpBase(object):
                 format_string = 'L'
             elif self.width == 8:
                 format_string = 'Q'
-            format_string = format_string * (len(rowdata) / self.width)
+            format_string = format_string * int(len(rowdata) / self.width)
             if self.little_endian:
                 format_string = '<' + format_string
             else:
@@ -233,7 +233,7 @@ class Dump(DumpBase):
 
         offset = self.row_to_offset(row_count)
 
-        rowbytevalues = [ord(c) for c in rowdata]
+        rowbytevalues = rowdata
         rowvalues = self.row_values(row_count)
 
         rowdesc = ''.join('{}{:0{}X}'.format(self.prefix_chars.get(offset + i * self.width, ' '),
