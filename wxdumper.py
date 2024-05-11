@@ -11,16 +11,20 @@ import textwrap
 import wx
 import wx.adv
 
-import wxdump
+import riscos_dump.wxdump as wxdump
 
 
 app_name = "Hex Dumper"
-app_version = '0.01'
-app_date = '15 Sep 2022'
+app_version = '0.02'
+app_date = '11 May 2024'
 app_description = "Display contents of files"
-app_copyright = "(C) Gerph, 2022"
+app_copyright = "(C) Gerph, 2022-2024"
 app_website = "https://github.com/gerph/riscos-dump-python"
-app_license = open(os.path.join(os.path.dirname(__file__), 'LICENSE'), 'r').read()
+try:
+    app_license = open(os.path.join(os.path.dirname(__file__),
+                                    'LICENSE'), 'r').read()
+except IOError:
+    app_license = "WXDump is licensed under MIT license. See the website."
 
 
 class MainFrame(wx.Frame):
@@ -119,11 +123,17 @@ class MyApp(wx.App):
             print("Dummy menu entry chosen")
 
         config = wxdump.WxDumpConfigDark()
+
+        # We include example text for the cell info that you might change
         config.cellinfo=lambda offset: 'Offset %i' % (offset,)
+
+        # An example menu entry has been added
         config.menu_extra=[('Dummy menu entry', dummy_menu_item)]
         config.dump_params = {
                                 'columns': 16,
                                 'width': 1,
+
+                                # The annotation function here create a string to use in the status bar
                                 'annotation_func': lambda grid, row, offset, address: 'Offset %i' % (offset,),
                                 'annotations': True,
                              }

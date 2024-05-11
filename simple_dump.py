@@ -6,7 +6,7 @@ Command line tool for dumping files.
 import argparse
 import sys
 
-import dump
+import riscos_dump.dump
 
 
 def main():

@@ -12,7 +12,7 @@ import sys
 import wx
 import wx.grid as gridlib
 
-import dump
+import riscos_dump.dump as dump
 
 
 class WxDumpConfig(object):
