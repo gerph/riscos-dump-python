@@ -1,10 +1,10 @@
 """
 WxPython classes for dumping hexadecimal information using the Dump object.
 
-* `DumpGrid` - is an embedable Grid which can be used inside existing frames.
-* `DumpFrame` - is a frame containing a grid which automatically resizes and can display
+* `DumpGrid`: is an embedable Grid which can be used inside existing frames.
+* `DumpFrame`: is a frame containing a grid which automatically resizes and can display
                 arbitrary data.
-* `DumpFileFrame` - is a subclass of DumpFrame which displays data from a file.
+* `DumpFileFrame`: is a subclass of DumpFrame which displays data from a file.
 """
 
 import sys
@@ -13,6 +13,8 @@ import wx
 import wx.grid as gridlib
 
 import riscos_dump.dump as dump
+
+
 
 
 class WxDumpConfig(object):
@@ -54,8 +56,8 @@ class WxDumpConfig(object):
     #                    True for selected item
     #   function has the args (grid, dump, chosen)
     #   chosen is the selection state when selected, or None to read state
-    # `menu_format` - adds entries that change the format of the display (eg 'show disassembly')
-    # `menu_extra` - adds entries that operate on the display
+    # `menu_format`: adds entries that change the format of the display (eg 'show disassembly')
+    # `menu_extra`: adds entries that operate on the display
     menu_format = []
     menu_extra = []
 
@@ -285,7 +287,7 @@ class DumpTable(gridlib.GridTableBase):
                         rowvalues = list(rowvalues)
                     rowvalues += [None] * (self.dump.columns - len(rowvalues))
 
-                rowbytevalues = [c for c in rowdata]
+                rowbytevalues = list(rowdata)
                 rowtext = self.dump.format_chars(rowbytevalues)
                 rowannotation = self.dump.format_annotation(row)
 
@@ -345,7 +347,7 @@ class DumpCellRenderer(wx.grid.GridCellStringRenderer):
             dc.SetFont(attr.GetFont())
 
             for part in text:
-                if isinstance(part, (str, unicode)):
+                if isinstance(part, str):
                     dc.SetTextForeground(attr.TextColour)
                     textpart = part
                 else:
@@ -665,7 +667,7 @@ class DumpGrid(gridlib.Grid):
 
             # save the current contents in the file
             filename = dialogue.GetPath()
-            if isinstance(filename, unicode):
+            if isinstance(filename, str):
                 filename = filename.encode('utf-8')
 
             with open(filename, 'wb') as fh:
@@ -750,7 +752,7 @@ class DumpGrid(gridlib.Grid):
         for col, size in enumerate(colsizes):
             self.SetColSize(col, size)
 
-        # The column lable height
+        # The column label height
         self.SetColLabelSize(int(self.cellsize[1] * 1.5))
 
         self.min_height = int(self.textsize[1] * 1.5)

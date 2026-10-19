@@ -166,7 +166,7 @@ class DumpBase(object):
         """
         start = self.row_to_offset(row)
         end = self.row_to_offset(row + 1)
-        return bytearray(self.data[start:end])
+        return self.data[start:end]
 
     def row_values(self, row):
         """
@@ -175,10 +175,10 @@ class DumpBase(object):
         rowdata = self.row_data(row)
 
         if self.width == 1:
-            return [b for b in rowdata]
+            return list(rowdata)
 
         if len(rowdata) % self.width != 0:
-            rowdata += '\x00' * (self.width - (len(rowdata) % self.width))
+            rowdata += b'\x00' * (self.width - (len(rowdata) % self.width))
 
         key = (self.width, len(rowdata), self.little_endian)
         format_string = self.format_strings.get(key, None)
@@ -189,7 +189,7 @@ class DumpBase(object):
                 format_string = 'L'
             elif self.width == 8:
                 format_string = 'Q'
-            format_string = format_string * int(len(rowdata) / self.width)
+            format_string = format_string * (len(rowdata) // self.width)
             if self.little_endian:
                 format_string = '<' + format_string
             else:
@@ -205,7 +205,7 @@ class Dump(DumpBase):
     def __init__(self, fh=None):
         super(Dump, self).__init__()
         if fh is None:
-            fh = sys.stdout
+            fh = getattr(sys.stdout, 'buffer', sys.stdout)
         self.fh = fh
         self.offset_highlight = None
         self.indent = ''
@@ -218,7 +218,7 @@ class Dump(DumpBase):
         self.prefix_chars = {}
 
     def writeln(self, msg):
-        self.fh.write(msg + '\n')
+        self.fh.write((msg + '\n').encode('latin-1'))
 
     def format_address(self, offset):
         if self.zero_pad_offset:
@@ -233,7 +233,7 @@ class Dump(DumpBase):
 
         offset = self.row_to_offset(row_count)
 
-        rowbytevalues = rowdata
+        rowbytevalues = list(rowdata)
         rowvalues = self.row_values(row_count)
 
         rowdesc = ''.join('{}{:0{}X}'.format(self.prefix_chars.get(offset + i * self.width, ' '),
