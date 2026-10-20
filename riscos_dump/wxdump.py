@@ -13,139 +13,33 @@ import wx
 import wx.grid as gridlib
 
 import riscos_dump.dump as dump
+import riscos_dump.dumpconfig as dumpconfig
+import riscos_dump.dumpgrid as dumpgrid
 
 
 
 
-class WxDumpConfig(object):
-    colours = {
-            # Grid lines and the cursor
-            'grid': ('grey', None),
-            'cursor': ('blue', None),
+class WxDumpConfig(dumpconfig.DumpConfig):
+    """
+    The default configuration (the toolkit-independent `DumpConfig`), for WxWidgets.
+    """
 
-            # Invalid cells
-            'invalid': ('white', 'black'),
 
-            # Attributes for the main cells
-            'plain': ('white', 'black'),
-            'alpha': ('white', 'black'),
-            'number': ('white', 'black'),
-            'control': ('white', 'slate blue'),
-            'topbit': ('white', 'forest green'),
+class WxDumpConfigDark(dumpconfig.DumpConfigDark):
+    """
+    The dark configuration (the toolkit-independent `DumpConfigDark`), for WxWidgets.
+    """
 
-            # Attributes applying to words or halfwords
-            'word': ('white', 'black'),
-            'halfword': ('white', 'black'),
 
-            # Attributes for the text column
-            'text': ('white', 'black'),
-
-            # Attributes for the annotation column
-            'annotation': ('white', 'black'),
-        }
-
-    # Parameters to pass on to the Dump object
-    dump_params = {}
-
-    # Number of characters in the row annotations
-    row_annotation_size = 24
-
-    # Menu entries as a list of tuples:
-    #   (menu item title, function to call, selection state)
-    #   selection state: False for non-check function
-    #                    True for selected item
-    #   function has the args (grid, dump, chosen)
-    #   chosen is the selection state when selected, or None to read state
-    # `menu_format`: adds entries that change the format of the display (eg 'show disassembly')
-    # `menu_extra`: adds entries that operate on the display
-    menu_format = []
-    menu_extra = []
-
-    # How many rows we will cache at a time
-    row_cache_limit = 400
-
-    # How high the default size of the frame should be
-    frame_max_height = 600
-
-    # Status bar enable
-    frame_statusbar = False
-
-    # Which of the data width choices are available:
-    has_width_1 = True
-    has_width_2 = True
-    has_width_4 = True
-
-    # Which of the menu operations are available:
-    has_goto_address = True
-    has_find_string = True
-
-    # Whether the grid lines should be shown between cells
-    has_grid = False
-
-    # Whether we show the save data menu option
-    has_save_data = True
-    default_savedata_filename = 'Dump.bin'
-
-    byte_colour = [0] * 256
-    for b in range(256):
-        if b < 32 or b == 127:
-            colour_name = 'control'
-        elif (64 < b < 91) or (96 < b < 122):
-            colour_name = 'alpha'
-        elif (48 < b < 58):
-            colour_name = 'number'
-        elif b < 128:
-            colour_name = 'plain'
-        else:
-            colour_name = 'topbit'
-
-        byte_colour[b] = colour_name
-
-    def cell_info(self, offset):
-        """
-        Information about a given offset, used by the Frame code.
-
-        @param offset:  The offset to get information from
-
-        @return:    Status bar text for this offset, or None
-        """
+def to_colour(value):
+    """
+    Convert a colour from the configuration (an RGB tuple, a name, or None) to a wx colour.
+    """
+    if value is None:
         return None
-
-    def mouse_over(self, offset):
-        """
-        Called when the mouse is over a new cell.
-
-        @param offset:  Data offset, or None if the pointer has moved out of the grid.
-        """
-        pass
-
-
-class WxDumpConfigDark(WxDumpConfig):
-    colours = {
-            # Grid lines and the cursor
-            'grid': ('grey', None),
-            'cursor': ('blue', None),
-
-            # Invalid cells
-            'invalid': ('black', 'white'),
-
-            # Attributes for the main cells
-            'plain': ('black', 'white'),
-            'alpha': ('black', 'white'),
-            'number': ('black', 'white'),
-            'control': ('black', 'sky blue'),
-            'topbit': ('black', 'green'),
-
-            # Attributes applying to words or halfwords
-            'word': ('black', 'white'),
-            'halfword': ('black', 'white'),
-
-            # Attributes for the text column
-            'text': ('black', 'white'),
-
-            # Attributes for the annotation column
-            'annotation': ('black', 'white'),
-        }
+    if isinstance(value, str):
+        return wx.Colour(value)
+    return wx.Colour(*value)
 
 
 class DumpTable(gridlib.GridTableBase):
@@ -162,8 +56,8 @@ class DumpTable(gridlib.GridTableBase):
         colours = self.config.colours
         for (name, cols) in colours.items():
             attr = gridlib.GridCellAttr()
-            attr.SetBackgroundColour(cols[0])
-            attr.SetTextColour(cols[1])
+            attr.SetBackgroundColour(to_colour(cols[0]))
+            attr.SetTextColour(to_colour(cols[1]))
             self.attributes[name] = attr
 
         self.align_right = (wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
@@ -365,7 +259,7 @@ class DumpCellRenderer(wx.grid.GridCellStringRenderer):
                 rect.width -= w
 
 
-class DumpGrid(gridlib.Grid):
+class DumpGrid(dumpgrid.DumpGridBase, gridlib.Grid):
 
     def __init__(self, parent, data, config=None):
         super(DumpGrid, self).__init__(parent, -1, style=wx.VSCROLL)
@@ -702,7 +596,7 @@ class DumpGrid(gridlib.Grid):
     def ScrollToRow(self, row):
         ux, uy = self.GetScrollPixelsPerUnit()
         (x0, y0, x1, y1) = self.CellToRect(row, 0)
-        self.Scroll(x0 / ux, y0 / uy)
+        self.Scroll(int(x0 / ux), int(y0 / uy))
 
     def SetDumpWidth(self, width):
         self.dump.columns = int(self.dump.width * self.dump.columns / width)
@@ -724,6 +618,25 @@ class DumpGrid(gridlib.Grid):
     def SetData(self, data):
         self.table.SetData(data)
         self.ForceRefresh()
+
+    # The DumpGridBase interface, in terms of the methods above
+    def set_data(self, data):
+        self.SetData(data)
+
+    def refresh(self):
+        self.ForceRefresh()
+
+    def visible_range(self):
+        return self.GetVisibleRange()
+
+    def scroll_to_row(self, row):
+        self.ScrollToRow(row)
+
+    def set_width(self, width):
+        self.SetDumpWidth(width)
+
+    def set_columns(self, columns):
+        self.SetDumpColumns(columns)
 
     def resize(self):
         self.text_column = self.dump.columns
